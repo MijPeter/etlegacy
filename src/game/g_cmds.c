@@ -4640,6 +4640,8 @@ void SetPlayerSpawn(gentity_t *ent, int majorSpawn, int minorSpawn, qboolean upd
 	if (update)
 	{
 		G_UpdateSpawnPointStatePlayerCounts();
+		// if player changes their spawn update th
+		ClientUserinfoChanged((int)(ent - g_entities));
 	}
 
 	resolvedSpawnPoint = Com_Clamp(0, (level.numSpawnPoints - 1), ent->client->sess.resolvedSpawnPointIndex);

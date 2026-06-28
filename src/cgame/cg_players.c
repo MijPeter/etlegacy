@@ -303,6 +303,9 @@ void CG_NewClientInfo(int clientNum)
 	v                = Info_ValueForKey(configstring, "msp");
 	newInfo.mspawnpt = Q_atoi(v);
 
+	v                     = Info_ValueForKey(configstring, "tsp");
+	newInfo.targetSpawnpt = Q_atoi(v);
+
 	// rank
 	v            = Info_ValueForKey(configstring, "r");
 	newInfo.rank = Q_atoi(v);
@@ -571,7 +574,7 @@ void CG_NewClientInfo(int clientNum)
 		CG_ToggleShoutcasterMode(newInfo.shoutcaster);
 	}
 
-	if (newInfo.spawnpt != ci->spawnpt || newInfo.mspawnpt != ci->mspawnpt)
+	if (newInfo.spawnpt != ci->spawnpt || newInfo.mspawnpt != ci->mspawnpt || newInfo.targetSpawnpt != ci->targetSpawnpt)
 	{
 		newInfo.spawnChangedTime = cg.time;
 	}

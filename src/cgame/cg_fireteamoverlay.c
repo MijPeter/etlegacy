@@ -679,9 +679,17 @@ static float CG_FTOverlay_SpawnpointWidth(const fireteamOverlay_t *fto, const in
 	{
 		spawnWidth = CG_Text_Width_Ext_Float(va("%i", fto->ci->spawnpt), fto->textScale, 0, FONT_TEXT) * MAJOR_SPAWN_NUMBER_WIDTH_SCALE;
 
-		if (comp->style & FT_SPAWN_POINT_MINOR && cg.hasMinorSpawnPoints && fto->ci->mspawnpt > 0)
+		if (comp->style & FT_SPAWN_POINT_MINOR)
 		{
-			spawnWidth += CG_Text_Width_Ext_Float(va("%i", fto->ci->mspawnpt), fto->textScaleMinorSpawn, 0, FONT_TEXT);
+			if (cg.hasMinorSpawnPoints && fto->ci->mspawnpt > 0)
+			{
+				spawnWidth += CG_Text_Width_Ext_Float(va("%i", fto->ci->mspawnpt), fto->textScaleMinorSpawn, 0, FONT_TEXT);
+			}
+			// on maps without the minor spawns display target spawnpt
+			else if (!cg.hasMinorSpawnPoints && fto->ci->targetSpawnpt > 0 && fto->ci->targetSpawnpt != fto->ci->spawnpt)
+			{
+				spawnWidth += CG_Text_Width_Ext_Float(va("(%i)", fto->ci->targetSpawnpt), fto->textScaleMinorSpawn, 0, FONT_TEXT);
+			}
 		}
 	}
 
@@ -949,13 +957,27 @@ static void CG_FTOverlay_DrawSpawnpoint(fireteamOverlay_t *fto, const int row, c
 
 		fto->x += CG_Text_Width_Ext_Float(spawnPtStr, fto->textScale, 0, FONT_TEXT) * MAJOR_SPAWN_NUMBER_WIDTH_SCALE;
 
-		if (comp->style & FT_SPAWN_POINT_MINOR && cg.hasMinorSpawnPoints && fto->ci->mspawnpt > 0)
+		if (comp->style & FT_SPAWN_POINT_MINOR)
 		{
-			const char *minorSpawnPtStr = va("%i", fto->ci->mspawnpt);
-			CG_Text_Paint_Ext(fto->x, fto->y + fto->textHeightOffset, fto->textScaleMinorSpawn, fto->textScaleMinorSpawn,
-			                  spawnPtColor, minorSpawnPtStr, 0, 0, comp->styleText, FONT_TEXT);
+			const char *minorSpawnPtStr = NULL;
 
-			fto->x += CG_Text_Width_Ext_Float(minorSpawnPtStr, fto->textScaleMinorSpawn, 0, FONT_TEXT);
+			if (cg.hasMinorSpawnPoints && fto->ci->mspawnpt > 0)
+			{
+				minorSpawnPtStr = va("%i", fto->ci->mspawnpt);
+			}
+			// on maps without the minor spawn system display target spawnpt
+			else if (!cg.hasMinorSpawnPoints && fto->ci->targetSpawnpt > 0 && fto->ci->targetSpawnpt != fto->ci->spawnpt)
+			{
+				minorSpawnPtStr = va("(%i)", fto->ci->targetSpawnpt);
+			}
+
+			if (minorSpawnPtStr)
+			{
+				CG_Text_Paint_Ext(fto->x, fto->y + fto->textHeightOffset, fto->textScaleMinorSpawn, fto->textScaleMinorSpawn,
+				                  spawnPtColor, minorSpawnPtStr, 0, 0, comp->styleText, FONT_TEXT);
+
+				fto->x += CG_Text_Width_Ext_Float(minorSpawnPtStr, fto->textScaleMinorSpawn, 0, FONT_TEXT);
+			}
 		}
 	}
 
