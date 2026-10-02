@@ -139,7 +139,6 @@ static const cmd_reference_t aCommandInfo[] =
 	{ "players",        CMD_USAGE_ANY_TIME,          qtrue,       qtrue,  G_players_cmd,                       ":^7 Lists all active players and their IDs/information"                                     },
 	{ "rconAuth",       CMD_USAGE_ANY_TIME,          qtrue,       qfalse, Cmd_AuthRcon_f,                      ":^7 Client authentication"                                                                  },
 	{ "ready",          CMD_USAGE_NO_INTERMISSION,   qtrue,       qtrue,  G_ready_cmd,                         ":^7 Sets your status to ^5ready^7 to start a match"                                         },
-	{ "readyteam",      CMD_USAGE_NO_INTERMISSION,   qtrue,       qtrue,  G_teamready_cmd,                     ":^7 Sets an entire team's status to ^5ready^7 to start a match"                             },
 	{ "ref",            CMD_USAGE_ANY_TIME,          qtrue,       qtrue,  G_ref_cmd,                           " <password>:^7 Become a referee (admin access)"                                             },
 //  { "remove",         CMD_USAGE_ANY_TIME,  qtrue,        NULL,                                " <player_ID>:^7 Removes a player from the team" },
 	{ "rs",             CMD_USAGE_ANY_TIME,          qtrue,       qfalse, Cmd_ResetSetup_f,                    ""                                                                                           },
@@ -1366,57 +1365,6 @@ void G_statsall_cmd(gentity_t *ent, unsigned int dwCommand, int fDump)
 		}
 		CP(va("ws %s\n", G_createStats(player)));
 	}
-}
-
-/**
- * @brief Sets a player's team "ready" status.
- * @param[in] ent
- * @param[in] dwCommand
- * @param fDump - unused
- */
-void G_teamready_cmd(gentity_t *ent, unsigned int dwCommand, int fDump)
-{
-	int       i;
-	gclient_t *cl;
-
-	if (g_gamestate.integer == GS_PLAYING || g_gamestate.integer == GS_INTERMISSION)
-	{
-		CP("cpm \"Match is already in progress!\n\"");
-		return;
-	}
-
-	if (ent->client->sess.sessionTeam == TEAM_SPECTATOR)
-	{
-		CP("cpm \"Spectators can't ready a team!\n\"");
-		return;
-	}
-
-	// Can't ready until enough players.
-	if (level.numPlayingClients < match_minplayers.integer)
-	{
-		CP("cpm \"Not enough players to start match!\n\"");
-		return;
-	}
-
-	if (!G_cmdDebounce(ent, aCommandInfo[dwCommand].pszCommandName))
-	{
-		return;
-	}
-
-	// Move them to correct ready state
-	for (i = 0; i < level.numPlayingClients; i++)
-	{
-		cl = level.clients + level.sortedClients[i];
-		if (cl->sess.sessionTeam == ent->client->sess.sessionTeam)
-		{
-			cl->pers.ready = qtrue;
-
-			G_MakeReady(&g_entities[level.sortedClients[i]]);
-		}
-	}
-
-	G_printFull(va("The %s team is ready!", aTeams[ent->client->sess.sessionTeam]), NULL);
-	G_readyMatchState();
 }
 
 /**

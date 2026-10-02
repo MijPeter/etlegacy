@@ -304,8 +304,14 @@ static qboolean G_IsHeavyDirectGib(meansOfDeath_t meansOfDeath, qboolean radiusD
  */
 void GibEntity(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, qboolean heavyDirectGib)
 {
-	gentity_t *te;
+	gentity_t *te, *twin;
 	vec3_t    dir;
+
+	// twins only follow their corpse
+	if (self->isCorpseTwin)
+	{
+		return;
+	}
 
 	G_GetGibDirection(self, inflictor, attacker, dir);
 
@@ -315,6 +321,22 @@ void GibEntity(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int d
 	te->s.effect3Time    = damage;
 	// Reuse the temp entity weapon byte as a compact heavy-direct gib flag.
 	te->s.weapon = heavyDirectGib;
+
+	// players seeing the twin of this corpse need the twin to be gibbed instead
+	twin = G_GetCorpseTwin(self);
+	if (twin)
+	{
+		gentity_t *te2 = G_TempEntity(self->r.currentOrigin, EV_GIB_PLAYER);
+
+		te2->s.otherEntityNum = twin->s.number;
+		te2->s.eventParm      = te->s.eventParm;
+		te2->s.effect3Time    = te->s.effect3Time;
+		te2->s.weapon         = te->s.weapon;
+
+		te->corpseTeam          = te2->corpseTeam = self->corpseTeam;
+		te->r.snapshotCallback  = te2->r.snapshotCallback = qtrue;
+		te2->isCorpseTwin       = qtrue;
+	}
 
 	self->takedamage = qfalse;
 	self->s.eType    = ET_INVISIBLE;
@@ -453,7 +475,7 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 	int       contents = 0, i, killer = ENTITYNUM_WORLD;
 	char      *killerName  = "<world>";
 	qboolean  killedintank = qfalse;
-	qboolean  attackerClient, dieFromSameTeam = qfalse;
+	qboolean  attackerClient;
 
 	//G_Printf( "player_die\n" );
 
@@ -491,9 +513,6 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 
 	if (attackerClient)
 	{
-		// dieFromSameTeam is valid client attacker only
-		dieFromSameTeam = OnSameTeam(self, attacker) || self->client->sess.sessionTeam == G_GetTeamFromEntity(inflictor);
-
 		self->client->pers.lastkiller_client     = attacker->s.clientNum;
 		attacker->client->pers.lastkilled_client = self->s.clientNum;
 
@@ -521,11 +540,6 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 	{
 		self->client->pers.playerStats.selfkills++;
 		self->isProp = qtrue; // selfkill is teamkill ...
-	}
-	else if (dieFromSameTeam)
-	{
-		G_LogTeamKill(attacker, weap);
-		self->isProp = qtrue; // teamkilled
 	}
 	else
 	{
@@ -656,6 +670,13 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 
 	self->client->ps.persistant[PERS_KILLED]++;
 
+	// dying costs 1 xp, but never go below zero
+	if (meansOfDeath != MOD_SWITCHTEAM && meansOfDeath != MOD_SWAP_PLACES &&
+	    self->client->sess.skillpoints[SK_LIGHT_WEAPONS] >= 1.f)
+	{
+		G_LoseSkillPoints(self, SK_LIGHT_WEAPONS, 1.f, "death");
+	}
+
 	// if player is holding ticking grenade, drop it
 	if (self->client->ps.grenadeTimeLeft)
 	{
@@ -739,7 +760,7 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 	{
 		attacker->client->pers.lastkilled_client = self->s.clientNum;
 
-		if (attacker == self || dieFromSameTeam)
+		if (attacker == self)
 		{
 			G_CheckComplaint(self, inflictor, attacker, meansOfDeath);
 
@@ -775,7 +796,7 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 	if (G_DropItems(self))
 	{
 		// reward attacker for killing objective carrier
-		if (attackerClient && !dieFromSameTeam)
+		if (attackerClient)
 		{
 			G_AddSkillPoints(attacker, SK_BATTLE_SENSE, 5.f, "obj. carrier killed");
 		}
@@ -784,7 +805,7 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 	// reward attacker for killing player on TOI area
 	if (self->client->touchingTOI || G_FindNearestTOI(self))
 	{
-		if (attackerClient && !dieFromSameTeam)
+		if (attackerClient)
 		{
 			G_AddSkillPoints(attacker, SK_BATTLE_SENSE, 3.f, "kill near obj.");
 		}
@@ -792,22 +813,6 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 
 	// prepare scoreboard
 	CalculateRanks();
-
-	// send a fancy "MEDIC!" scream.  Sissies, ain' they?
-	if (self->health > GIB_HEALTH &&
-	    !GetMODTableData(meansOfDeath)->noYellMedic && // these mods gib -> no fancy scream
-	    !killedintank &&
-	    self->waterlevel < 3)
-	{
-		G_AddEvent(self, EV_MEDIC_CALL, 0);
-#ifdef FEATURE_OMNIBOT
-		// ATM: only register the goal if the target isn't in water.
-		if (self->waterlevel <= 1)
-		{
-			Bot_AddFallenTeammateGoals(self, self->client->sess.sessionTeam);
-		}
-#endif
-	}
 
 	self->client->wantsscore = qtrue;          // show scores
 
@@ -913,28 +918,13 @@ void player_die(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int 
 #endif
 		limbo(self, qfalse);   // but no corpse
 	}
-	else if (meansOfDeath == MOD_SUICIDE)
+	else
 	{
+		// nobody is going to revive him
 #ifdef FEATURE_SERVERMDX
 		self->client->deathAnim = qtrue;    // add animation time
 #endif
 		limbo(self, qtrue);
-	}
-	else if (g_gametype.integer == GT_WOLF_LMS)
-	{
-#ifdef FEATURE_SERVERMDX
-		self->client->deathAnim = qfalse;    // add no animation time
-#endif
-		if (!G_CountTeamMedics(self->client->sess.sessionTeam, qtrue))
-		{
-			limbo(self, qtrue);
-		}
-	}
-	else
-	{
-#ifdef FEATURE_SERVERMDX
-		self->client->deathAnim = qtrue;    // add animation time
-#endif
 	}
 }
 
@@ -1431,7 +1421,7 @@ void G_DamageExt(gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec
 {
 	int         take;
 	int         knockback;
-	qboolean    wasAlive, onSameTeam;
+	qboolean    wasAlive;
 	hitRegion_t hr           = HR_NUM_HITREGIONS;
 	int         hitEventType = HIT_NONE;
 
@@ -1466,20 +1456,16 @@ void G_DamageExt(gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec
 
 	// was the bot alive before applying any damage?
 	wasAlive   = (targ->health > 0);
-	onSameTeam = OnSameTeam(attacker, targ);
 
 	// combatstate
 	if (targ->client && attacker && attacker->client && attacker != targ)
 	{
 		if (g_gamestate.integer == GS_PLAYING)
 		{
-			if (!onSameTeam)
+			targ->client->combatState |= (1 << COMBATSTATE_DAMAGERECEIVED);
+			if (attacker->client->sess.sessionTeam != TEAM_SPECTATOR)
 			{
-				targ->client->combatState |= (1 << COMBATSTATE_DAMAGERECEIVED);
-				if (attacker->client->sess.sessionTeam != TEAM_SPECTATOR)
-				{
-					attacker->client->combatState |= (1 << COMBATSTATE_DAMAGEDEALT);
-				}
+				attacker->client->combatState |= (1 << COMBATSTATE_DAMAGEDEALT);
 			}
 		}
 	}
@@ -1619,33 +1605,11 @@ void G_DamageExt(gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec
 		VectorNormalize(dir);
 	}
 
-	// check for completely getting out of the damage
-	if (!(dflags & DAMAGE_NO_PROTECTION))
-	{
-		// if TF_NO_FRIENDLY_FIRE is set, don't do damage to the target
-		// if the attacker was on the same team
-		if (targ != attacker && (onSameTeam || (targ->client && attacker->client && targ->client->sess.sessionTeam == G_GetTeamFromEntity(inflictor))))
-		{
-			if ((g_gamestate.integer != GS_PLAYING && match_warmupDamage.integer == 1))
-			{
-				return;
-			}
-			else if (!g_friendlyFire.integer)
-			{
-				return;
-			}
-		}
-	}
-
 	// add to the attacker's hit counter (but only if target is a client)
 	if (attacker && attacker->client && targ->client  && targ != attacker &&
 	    mod != MOD_SWITCHTEAM && mod != MOD_SWAP_PLACES && mod != MOD_SUICIDE)
 	{
-		if (onSameTeam || (targ->client->ps.powerups[PW_OPS_DISGUISED] && (g_friendlyFire.integer & 1)))
-		{
-			hitEventType = HIT_TEAMSHOT;
-		}
-		else if (!targ->client->ps.powerups[PW_OPS_DISGUISED])
+		if (!targ->client->ps.powerups[PW_OPS_DISGUISED])
 		{
 			hitEventType = HIT_BODYSHOT;
 		}
@@ -1660,8 +1624,7 @@ void G_DamageExt(gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec
 		take *= G_DamageFalloff(VectorDistance(point, muzzleTrace), 0.5f);
 	}
 
-	if ((targ->flags & FL_NO_KNOCKBACK) || (dflags & DAMAGE_NO_KNOCKBACK) ||
-	    (targ->client && g_friendlyFire.integer && (onSameTeam || (attacker->client && targ->client->sess.sessionTeam == G_GetTeamFromEntity(inflictor)))))
+	if ((targ->flags & FL_NO_KNOCKBACK) || (dflags & DAMAGE_NO_KNOCKBACK))
 	{
 		knockback = 0;
 	}
@@ -1721,19 +1684,10 @@ void G_DamageExt(gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec
 		targ->client->ps.eFlags |= EF_HEADSHOT;
 
 		// Record the headshot
-		if (targ->client && attacker && attacker->client
-#ifndef DEBUG_STATS
-		    && attacker->client->sess.sessionTeam != targ->client->sess.sessionTeam
-#endif
-		    )
+		if (targ->client && attacker && attacker->client)
 		{
 			G_addStatsHeadShot(attacker, mod);
-
-			// Upgrade the hit event to headshot if we have not yet classified it as a teamshot (covertops etc..)
-			if (hitEventType != HIT_TEAMSHOT)
-			{
-				hitEventType = HIT_HEADSHOT;
-			}
+			hitEventType = HIT_HEADSHOT;
 		}
 
 		if (g_debugBullets.integer)
@@ -1909,11 +1863,6 @@ void G_DamageExt(gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec
 		targ->client->lasthurt_client = attacker->s.number;
 		targ->client->lasthurt_mod    = mod;
 		targ->client->lasthurt_time   = level.time;
-		if (onSameTeam && wasAlive && attacker != targ)
-		{
-			targ->client->pers.lastteambleed_client = attacker->s.number;
-			targ->client->pers.lastteambleed_dmg    = take;
-		}
 	}
 
 	// do the damage
@@ -1975,7 +1924,7 @@ void G_DamageExt(gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec
 
 				if (targ->client)
 				{
-					if (G_GetTeamFromEntity(inflictor) != G_GetTeamFromEntity(targ))
+					if (attacker != targ)
 					{
 						G_AddKillSkillPoints(attacker, mod, hr, (dflags & DAMAGE_RADIUS));
 					}

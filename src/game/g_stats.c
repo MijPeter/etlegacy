@@ -69,21 +69,6 @@ void G_LogKill(gentity_t *ent, weapon_t weap)
 }
 
 /**
- * @brief G_LogTeamKill
- * @param[in,out] ent
- * @param[in] weap
- */
-void G_LogTeamKill(gentity_t *ent, weapon_t weap)
-{
-	if (!ent->client)
-	{
-		return;
-	}
-
-	ent->client->pers.playerStats.weaponStats[weap].teamkills++;
-}
-
-/**
  * @brief G_LogRegionHit
  * @param[in,out] ent
  * @param[in] hr
@@ -426,6 +411,12 @@ void G_AddSkillPoints(gentity_t *ent, skillType_t skill, float points, const cha
 		return; // no xp in LMS
 	}
 
+	// only light weapons are rewarded
+	if (skill != SK_LIGHT_WEAPONS)
+	{
+		return;
+	}
+
 	level.teamXP[skill][ent->client->sess.sessionTeam - TEAM_AXIS] += points;
 
 	ent->client->sess.skillpoints[skill] += points;
@@ -590,7 +581,6 @@ void G_AddKillAssistPoints(gentity_t *target, gentity_t *attacker)
 {
 	unsigned int          i;
 	unsigned              rewardedPlayers;
-	qboolean              complaintSent = qfalse;
 	damageReceivedStats_t *dmgReceivedSts[MAX_CLIENTS];
 
 	if (!target || !target->client)
@@ -630,19 +620,10 @@ void G_AddKillAssistPoints(gentity_t *target, gentity_t *attacker)
 			continue;
 		}
 
-		// reward only opposite team
-		if (ent->client->sess.sessionTeam != target->client->sess.sessionTeam)
-		{
-			// rewards from 0 to 3 points depending of the percentage of damage inflicted to player
-			G_AddSkillPoints(ent, SK_BATTLE_SENSE, 3.f * MIN(1, dmgReceivedSts[i]->damageReceived / (float)target->client->pers.maxHealth), "kill assist");
-			ent->client->sess.kill_assists++;
-			++rewardedPlayers;
-		}
-		else if (g_teambleedComplaint.integer >= 0 && !complaintSent && dmgReceivedSts[i]->damageReceived >= target->client->pers.maxHealth * (g_teambleedComplaint.integer / 100))      // allow complaint if too much teambleed has caused the death
-		{
-			// only one complaint for the highest team bleeder
-			complaintSent = G_CheckComplaint(target, ent, ent, dmgReceivedSts[i]->mods);
-		}
+		// rewards from 0 to 3 points depending of the percentage of damage inflicted to player
+		G_AddSkillPoints(ent, SK_BATTLE_SENSE, 3.f * MIN(1, dmgReceivedSts[i]->damageReceived / (float)target->client->pers.maxHealth), "kill assist");
+		ent->client->sess.kill_assists++;
+		++rewardedPlayers;
 	}
 }
 
@@ -1349,33 +1330,8 @@ void G_BuildEndgameStats(void)
 
 	best = NULL;
 
-	// I ain't got no friends award - check team kills, then team damage given (min 5 tks)
-	for (i = 0; i < level.numConnectedClients; i++)
-	{
-		gclient_t *cl = &level.clients[level.sortedClients[i]];
-
-		if (cl->sess.sessionTeam == TEAM_FREE)
-		{
-			continue;
-		}
-
-		if (!best || cl->sess.team_kills > best->sess.team_kills)
-		{
-			best          = cl;
-			bestClientNum = level.sortedClients[i];
-		}
-		else if (cl->sess.team_kills == best->sess.team_kills && cl->sess.team_damage_given > best->sess.team_damage_given)
-		{
-			best          = cl;
-			bestClientNum = level.sortedClients[i];
-		}
-	}
-
-	if (best)
-	{
-		best->hasaward = qtrue;
-	}
-	Q_strcat(buffer, 1024, va("%i %i %i ", best && best->sess.team_kills >= 5 ? bestClientNum : -1, best ? best->sess.team_kills : 0, best && best->sess.team_kills >= 5 ? best->sess.sessionTeam : TEAM_FREE));
+	// I ain't got no friends award - nobody has friends to kill
+	Q_strcat(buffer, 1024, "-1 0 0 ");
 
 	best = NULL;
 

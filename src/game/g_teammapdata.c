@@ -1032,6 +1032,22 @@ void G_SendSpectatorMapEntityInfo(gentity_t *e)
 }
 
 /**
+ * @brief Players only get their own position, nobody shares theirs with them
+ * @param[in] mEnt
+ * @param[in] e
+ * @return
+ */
+static qboolean G_MapEntityIsOtherPlayer(mapEntityData_t *mEnt, gentity_t *e)
+{
+	if (mEnt->type != ME_PLAYER && mEnt->type != ME_PLAYER_REVIVE && mEnt->type != ME_PLAYER_OBJECTIVE)
+	{
+		return qfalse;
+	}
+
+	return mEnt->data != e->s.clientNum;
+}
+
+/**
  * @brief G_SendMapEntityInfo
  * @param[in] e
  */
@@ -1078,7 +1094,11 @@ void G_SendMapEntityInfo(gentity_t *e)
 				}
 			}
 		}
-		cnt++;
+
+		if (!G_MapEntityIsOtherPlayer(mEnt, e))
+		{
+			cnt++;
+		}
 
 		mEnt = mEnt->next;
 	}
@@ -1102,6 +1122,11 @@ void G_SendMapEntityInfo(gentity_t *e)
 	{
 
 		if (mEnt->singleClient >= 0 && e->s.clientNum != mEnt->singleClient)
+		{
+			continue;
+		}
+
+		if (G_MapEntityIsOtherPlayer(mEnt, e))
 		{
 			continue;
 		}
@@ -1391,7 +1416,6 @@ void G_UpdateTeamMapData(void)
 				}
 
 				if (ent2->health <= 0 ||
-				    ent2->client->sess.sessionTeam == ent->client->sess.sessionTeam ||
 				    !ent2->client->ps.powerups[PW_OPS_DISGUISED])
 				{
 					continue;
@@ -1440,12 +1464,6 @@ void G_UpdateTeamMapData(void)
 
 				// do not add 'dead' players
 				if (ent2->health <= 0)
-				{
-					continue;
-				}
-
-				// we will only add other team members here
-				if (ent2->client->sess.sessionTeam == ent->client->sess.sessionTeam)
 				{
 					continue;
 				}

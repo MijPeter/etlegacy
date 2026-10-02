@@ -876,7 +876,7 @@ void G_BurnTarget(gentity_t *self, gentity_t *body, qboolean directhit)
 		return;
 	}
 
-	// don't catch fire if invulnerable or same team in no FF
+	// don't catch fire if invulnerable
 	if (body->client)
 	{
 		if (body->client->ps.powerups[PW_INVULNERABLE] >= level.time)
@@ -888,11 +888,6 @@ void G_BurnTarget(gentity_t *self, gentity_t *body, qboolean directhit)
 
 		//if( !self->count2 && body == self->parent )
 		//  return;
-
-		if (!(g_friendlyFire.integer) && OnSameTeam(body, self->parent))
-		{
-			return;
-		}
 	}
 
 	// don't catch fire if under water or invulnerable
@@ -1673,11 +1668,6 @@ void G_LandmineThink(gentity_t *self)
 		{
 			continue;
 		}
-
-		//if (!g_friendlyFire.integer && self->s.teamNum == ent->client->sess.sessionTeam)
-		//{
-		//   continue;
-		//}
 
 #ifdef FEATURE_OMNIBOT
 		if (!(g_OmniBotFlags.integer & OBF_TRIGGER_MINES) && ent->r.svFlags & SVF_BOT)

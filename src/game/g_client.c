@@ -598,6 +598,128 @@ static void G_StepSlideCorpse(gentity_t *ent, vec3_t newOrigin)
 }
 #endif
 
+// Players see everybody sharing their team wearing the other uniform (see G_UpdatePlayerInfos).
+// A corpse is a single entity carrying its own team, so these players get a twin of it
+// wearing the other uniform instead, and nobody ever gets both.
+
+/**
+ * @brief G_GetCorpseTwin
+ * @param[in] body
+ * @return The twin of this corpse if there is one
+ */
+gentity_t *G_GetCorpseTwin(gentity_t *body)
+{
+	gentity_t *twin = body->corpseTwin;
+
+	if (body->isCorpseTwin || !twin || !twin->inuse || !twin->isCorpseTwin || twin->corpseTwin != body)
+	{
+		return NULL;
+	}
+
+	return twin;
+}
+
+/**
+ * @brief Make the twin look like its corpse, with the other uniform
+ * @param[in,out] twin
+ * @param[in] body
+ */
+static void G_UpdateCorpseTwin(gentity_t *twin, gentity_t *body)
+{
+	int stolen = BODY_TEAM(body) >= 4 ? 4 : 0; // uniform has been stolen
+
+	twin->s         = body->s;
+	twin->s.number  = twin - g_entities;
+	BODY_TEAM(twin) = (body->corpseTeam == TEAM_AXIS ? TEAM_ALLIES : TEAM_AXIS) + stolen;
+
+	twin->corpseTeam = body->corpseTeam;
+
+	twin->r.svFlags = body->r.svFlags;
+	VectorCopy(body->r.mins, twin->r.mins);
+	VectorCopy(body->r.maxs, twin->r.maxs);
+	VectorCopy(body->r.currentOrigin, twin->r.currentOrigin);
+	VectorCopy(body->r.currentAngles, twin->r.currentAngles);
+
+	trap_LinkEntity(twin);
+}
+
+/**
+ * @brief G_SpawnCorpseTwin
+ * @param[in,out] body
+ */
+static void G_SpawnCorpseTwin(gentity_t *body)
+{
+	gentity_t *twin = G_GetCorpseTwin(body);
+
+	if (!twin)
+	{
+		twin               = G_Spawn();
+		twin->classname    = "corpse_twin";
+		twin->isCorpseTwin = qtrue;
+		twin->corpseTwin   = body;
+		body->corpseTwin   = twin;
+	}
+
+	// only there to be seen
+	twin->r.contents         = 0;
+	twin->clipmask           = 0;
+	twin->takedamage         = qfalse;
+	twin->r.snapshotCallback = qtrue;
+
+	G_UpdateCorpseTwin(twin, body);
+}
+
+/**
+ * @brief Twins follow whatever happens to their corpse
+ */
+void G_RunCorpseTwins(void)
+{
+	int       i;
+	gentity_t *twin, *body;
+
+	for (i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		twin = &g_entities[i];
+
+		if (!twin->inuse || !twin->isCorpseTwin || twin->s.eType >= ET_EVENTS)
+		{
+			continue;
+		}
+
+		body = twin->corpseTwin;
+
+		if (!body || !body->inuse || !body->r.linked || body->corpseTwin != twin)
+		{
+			G_BodyDP(twin);
+			continue;
+		}
+
+		G_UpdateCorpseTwin(twin, body);
+	}
+}
+
+/**
+ * @brief G_CorpseSnapshotCallback
+ * @param[in] ent corpse, twin or gib event of one of these
+ * @param[in] clientNum
+ * @return qtrue if this client has to get this entity
+ */
+qboolean G_CorpseSnapshotCallback(gentity_t *ent, int clientNum)
+{
+	qboolean swapped = qfalse;
+
+	if (clientNum >= 0 && clientNum < MAX_CLIENTS)
+	{
+		gclient_t *viewer = &level.clients[clientNum];
+
+		// same as G_PlayerInfoIsEnemyForced
+		swapped = (viewer->sess.sessionTeam == TEAM_AXIS || viewer->sess.sessionTeam == TEAM_ALLIES) &&
+		          viewer->sess.sessionTeam == ent->corpseTeam;
+	}
+
+	return ent->isCorpseTwin ? swapped : !swapped;
+}
+
 /**
  * @brief A player is respawning, so make an entity that looks
  * just like the existing corpse to leave behind.
@@ -757,7 +879,13 @@ void CopyToBodyQue(gentity_t *ent)
 	// don't take more damage if already gibbed
 	body->takedamage = ent->health > GIB_HEALTH;
 
+	body->corpseTeam         = ent->client->sess.sessionTeam;
+	body->isCorpseTwin       = qfalse;
+	body->r.snapshotCallback = qtrue;
+
 	trap_LinkEntity(body);
+
+	G_SpawnCorpseTwin(body);
 }
 
 //======================================================================
@@ -881,7 +1009,6 @@ void limbo(gentity_t *ent, qboolean makeCorpse)
 	{
 		gclient_t *cl;
 		int       i, contents;
-		int       startclient = ent->client->ps.clientNum;
 
 		// GibEntity() already spawned the gibs and hid the player entity.
 		// Do not let later limbo paths recreate an untouchable corpse from it.
@@ -959,25 +1086,9 @@ void limbo(gentity_t *ent, qboolean makeCorpse)
 			TossWeapons(ent);
 		}
 
-		if (G_FollowSame(ent, ent->client->sess.userSpectatorClient))
-		{
-			ent->client->sess.spectatorState  = SPECTATOR_FOLLOW;
-			ent->client->sess.spectatorClient = ent->client->sess.userSpectatorClient;
-		}
-		else
-		{
-			ent->client->sess.spectatorClient = startclient;
-			Cmd_FollowCycle_f(ent, 1, qfalse, qtrue); // get fresh spectatorClient
-			if (ent->client->sess.spectatorClient == startclient)
-			{
-				// No one to follow, so just stay put
-				ent->client->sess.spectatorState = SPECTATOR_FREE;
-			}
-			else
-			{
-				ent->client->sess.spectatorState = SPECTATOR_FOLLOW;
-			}
-		}
+		// No one to follow, so just stay put
+		ent->client->sess.spectatorClient = ent->client->ps.clientNum;
+		ent->client->sess.spectatorState  = SPECTATOR_FREE;
 
 		for (i = 0; i < level.numConnectedClients; i++)
 		{
@@ -1760,6 +1871,156 @@ char *CheckUserinfo(int clientNum, char *userinfo)
 	return 0;
 }
 
+// Stock clients decide who is a teammate from the team stored in the player
+// configstrings. So that everybody else looks like an enemy, players get their
+// own copy of the configstrings of players sharing their team, with the team swapped.
+#define PLAYERINFO_MAX_SENT_PER_FRAME 8 // per viewer, don't flood the reliable commands
+
+static int  playerInfoDirtyFrame[MAX_CLIENTS];             // frame (+1) the configstring was last set at, 0 if nothing is pending
+static int  playerInfoViewTeam[MAX_CLIENTS];               // team the viewer had when the player infos were last queued for him
+static byte playerInfoPending[MAX_CLIENTS][MAX_CLIENTS];   // [viewer][other] has to be sent
+
+/**
+ * @brief The real configstring of this player is about to be sent to everybody
+ * @param[in] clientNum
+ */
+static void G_PlayerInfoChanged(int clientNum)
+{
+	playerInfoDirtyFrame[clientNum] = level.framenum + 1;
+}
+
+/**
+ * @brief Everybody has to be sent again to this viewer
+ * @param[in] clientNum
+ */
+static void G_PlayerInfoViewerReset(int clientNum)
+{
+	playerInfoViewTeam[clientNum] = -1;
+}
+
+/**
+ * @brief G_PlayerInfoIsEnemyForced
+ * @param[in] viewer
+ * @param[in] other
+ * @return qtrue if viewer needs other to be shown on the opposite team
+ */
+static qboolean G_PlayerInfoIsEnemyForced(gclient_t *viewer, gclient_t *other)
+{
+	if (viewer->sess.sessionTeam != TEAM_AXIS && viewer->sess.sessionTeam != TEAM_ALLIES)
+	{
+		return qfalse;
+	}
+
+	return viewer->sess.sessionTeam == other->sess.sessionTeam;
+}
+
+/**
+ * @brief Send the configstring of other to viewer only
+ * @param[in] viewerNum
+ * @param[in] otherNum
+ * @param[in] enemyForced
+ */
+static void G_SendPlayerInfo(int viewerNum, int otherNum, qboolean enemyForced)
+{
+	char configStr[MAX_INFO_STRING];
+
+	trap_GetConfigstring(CS_PLAYERS + otherNum, configStr, sizeof(configStr));
+
+	// long strings are sent in chunks by the server, leave these alone
+	if (!configStr[0] || strlen(configStr) > MAX_STRING_CHARS - 24)
+	{
+		return;
+	}
+
+	if (enemyForced)
+	{
+		// names can't contain backslashes, so this is the team key
+		char *team = strstr(configStr, "\\t\\");
+
+		if (!team || !team[3] || (team[4] && team[4] != '\\'))
+		{
+			return;
+		}
+
+		team[3] = level.clients[viewerNum].sess.sessionTeam == TEAM_AXIS ? '0' + TEAM_ALLIES : '0' + TEAM_AXIS;
+	}
+
+	trap_SendServerCommand(viewerNum, va("cs %i \"%s\"", CS_PLAYERS + otherNum, configStr));
+}
+
+/**
+ * @brief Keep the player configstrings of each player up to date so everybody else is an enemy
+ */
+void G_UpdatePlayerInfos(void)
+{
+	int       i, j, sent;
+	int       viewerNum, otherNum;
+	gclient_t *viewer, *other;
+
+	// the real configstring is sent to everybody at the end of the server frame
+	// following the change, so it can only be replaced once this has happened
+	for (i = 0; i < level.numConnectedClients; i++)
+	{
+		otherNum = level.sortedClients[i];
+		other    = &level.clients[otherNum];
+
+		if (!playerInfoDirtyFrame[otherNum])
+		{
+			continue;
+		}
+
+		// not sent yet (frame numbers start over on restart, don't wait for ever)
+		if (level.framenum <= playerInfoDirtyFrame[otherNum] && playerInfoDirtyFrame[otherNum] <= level.framenum + 1)
+		{
+			continue;
+		}
+
+		playerInfoDirtyFrame[otherNum] = 0;
+
+		for (j = 0; j < level.numConnectedClients; j++)
+		{
+			viewerNum = level.sortedClients[j];
+
+			if (viewerNum != otherNum && G_PlayerInfoIsEnemyForced(&level.clients[viewerNum], other))
+			{
+				playerInfoPending[viewerNum][otherNum] = 1;
+			}
+		}
+	}
+
+	for (i = 0; i < level.numConnectedClients; i++)
+	{
+		viewerNum = level.sortedClients[i];
+		viewer    = &level.clients[viewerNum];
+
+		if (viewer->pers.connected != CON_CONNECTED || (g_entities[viewerNum].r.svFlags & SVF_BOT))
+		{
+			continue;
+		}
+
+		// viewer just got in or changed team, everybody has to be sent again
+		if (playerInfoViewTeam[viewerNum] != viewer->sess.sessionTeam)
+		{
+			playerInfoViewTeam[viewerNum] = viewer->sess.sessionTeam;
+			Com_Memset(playerInfoPending[viewerNum], 1, sizeof(playerInfoPending[viewerNum]));
+		}
+
+		for (j = 0, sent = 0; j < level.numConnectedClients && sent < PLAYERINFO_MAX_SENT_PER_FRAME; j++)
+		{
+			otherNum = level.sortedClients[j];
+
+			if (otherNum == viewerNum || !playerInfoPending[viewerNum][otherNum])
+			{
+				continue;
+			}
+
+			playerInfoPending[viewerNum][otherNum] = 0;
+			G_SendPlayerInfo(viewerNum, otherNum, G_PlayerInfoIsEnemyForced(viewer, &level.clients[otherNum]));
+			sent++;
+		}
+	}
+}
+
 /**
  * @brief Called from ClientConnect when the player first connects and
  * directly by the server system when the player updates a userinfo variable.
@@ -2157,6 +2418,7 @@ void ClientUserinfoChanged(int clientNum)
 
 	trap_GetConfigstring(CS_PLAYERS + clientNum, oldname, sizeof(oldname));
 	trap_SetConfigstring(CS_PLAYERS + clientNum, configStr);
+	G_PlayerInfoChanged(clientNum);
 
 	if (!Q_stricmp(oldname, configStr)) // not changed
 	{
@@ -2665,6 +2927,9 @@ void ClientBegin(int clientNum)
 	}
 #endif
 
+	// the gamestate the client just got only has the real player configstrings
+	G_PlayerInfoViewerReset(clientNum);
+
 	if (ent->r.linked)
 	{
 		trap_UnlinkEntity(ent);
@@ -2985,7 +3250,6 @@ static qboolean isMortalSelfDamage(gentity_t *ent)
 	return (
 		(ent->enemy && ent->enemy->s.number >= MAX_CLIENTS) // worldkill
 		|| (ent->enemy == ent) // selfkill
-		|| OnSameTeam(ent->enemy, ent) // teamkill
 		);
 }
 
@@ -3693,6 +3957,7 @@ void ClientDisconnect(int clientNum)
 	ent->r.svFlags &= ~SVF_BOT;
 
 	trap_SetConfigstring(CS_PLAYERS + clientNum, "");
+	G_PlayerInfoViewerReset(clientNum);
 
 	CalculateRanks();
 

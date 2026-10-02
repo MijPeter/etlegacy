@@ -42,27 +42,6 @@
 #include "g_etbot_interface.h"
 #endif
 
-/**
- * @brief OnSameTeam
- * @param[in] ent1
- * @param[in] ent2
- * @return
- */
-qboolean OnSameTeam(gentity_t *ent1, gentity_t *ent2)
-{
-	if (!ent1 || !ent1->client || !ent2 || !ent2->client)
-	{
-		return qfalse;
-	}
-
-	if (ent1->client->sess.sessionTeam == ent2->client->sess.sessionTeam)
-	{
-		return qtrue;
-	}
-
-	return qfalse;
-}
-
 #define WCP_ANIM_NOFLAG             0
 #define WCP_ANIM_RAISE_AXIS         1
 #define WCP_ANIM_RAISE_AMERICAN     2
@@ -725,7 +704,8 @@ void TeamplayInfoMessage(team_t team)
 			continue;
 		}
 
-		if (player->inuse && (player->client->sess.sessionTeam == team || player->client->sess.shoutcaster) && !(player->r.svFlags & SVF_BOT) && player->client->pers.connected == CON_CONNECTED)
+		// players don't get anybody's info, only shoutcasters do
+		if (player->inuse && player->client->sess.shoutcaster && !(player->r.svFlags & SVF_BOT) && player->client->pers.connected == CON_CONNECTED)
 		{
 			trap_SendServerCommand(player - g_entities, tinfo);
 		}

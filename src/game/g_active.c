@@ -592,8 +592,7 @@ void SpectatorThink(gentity_t *ent, usercmd_t *ucmd)
 	// sanity check - check .active in case the client sends us something completely bogus
 
 	if (crosshairEnt->inuse && crosshairEnt->client &&
-	    (ent->client->sess.sessionTeam == crosshairEnt->client->sess.sessionTeam ||
-	     crosshairEnt->client->ps.powerups[PW_OPS_DISGUISED]))
+	    crosshairEnt->client->ps.powerups[PW_OPS_DISGUISED])
 	{
 
 		// identifyClientHealth sent as unsigned char, so we
@@ -1118,78 +1117,8 @@ void ClientEvents(gentity_t *ent, int oldEventSequence)
  */
 void WolfFindMedic(gentity_t *self)
 {
-	int       i, medic = -1;
-	gclient_t *cl;
-	vec3_t    start, end;
-	trace_t   tr;
-	float     bestdist = 1024, dist;
-
 	self->client->ps.viewlocked_entNum = 0;
 	self->client->ps.viewlocked        = VIEWLOCK_NONE;
-
-	VectorCopy(self->s.pos.trBase, start);
-	start[2] += self->client->ps.viewheight;
-
-	for (i = 0; i < level.numConnectedClients; i++)
-	{
-		cl = &level.clients[level.sortedClients[i]];
-
-		if (level.sortedClients[i] == self->client->ps.clientNum)
-		{
-			continue;
-		}
-
-		if (cl->sess.sessionTeam != self->client->sess.sessionTeam)
-		{
-			continue;
-		}
-
-		if (cl->ps.pm_type == PM_DEAD)
-		{
-			continue;
-		}
-
-		// limbo'd players are not PM_DEAD or STAT_HEALTH <= 0.
-		// and we certainly don't want to lock to them
-		if (cl->ps.pm_flags & PMF_LIMBO)
-		{
-			continue;
-		}
-
-		if (cl->ps.stats[STAT_HEALTH] <= 0)
-		{
-			continue;
-		}
-
-		if (cl->ps.stats[STAT_PLAYER_CLASS] != PC_MEDIC)
-		{
-			continue;
-		}
-
-		VectorCopy(g_entities[level.sortedClients[i]].s.pos.trBase, end);
-		end[2] += cl->ps.viewheight;
-
-		trap_Trace(&tr, start, NULL, NULL, end, self->s.number, CONTENTS_SOLID);
-		if (tr.fraction < 0.95f)
-		{
-			continue;
-		}
-
-		VectorSubtract(end, start, end);
-		dist = VectorNormalize(end);
-
-		if (dist < bestdist)
-		{
-			medic    = cl->ps.clientNum;
-			bestdist = dist;
-		}
-	}
-
-	if (medic >= 0)
-	{
-		self->client->ps.viewlocked_entNum = medic;
-		self->client->ps.viewlocked        = VIEWLOCK_MEDIC;
-	}
 }
 
 /**
@@ -1573,8 +1502,7 @@ void ClientThink_real(gentity_t *ent)
 	}
 
 	if (g_entities[ent->client->ps.identifyClient].inuse && g_entities[ent->client->ps.identifyClient].client &&
-	    (ent->client->sess.sessionTeam == g_entities[ent->client->ps.identifyClient].client->sess.sessionTeam ||
-	     g_entities[ent->client->ps.identifyClient].client->ps.powerups[PW_OPS_DISGUISED]))
+	    g_entities[ent->client->ps.identifyClient].client->ps.powerups[PW_OPS_DISGUISED])
 	{
 		ent->client->ps.identifyClientHealth = g_entities[ent->client->ps.identifyClient].health;
 	}

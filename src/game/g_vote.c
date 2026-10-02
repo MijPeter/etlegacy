@@ -80,17 +80,13 @@ static const vote_reference_t aVoteInfo[] =
 	{ 0x1ff, "mutespecs",              G_Mutespecs_v,              "Mute Spectators",            " <0|1>^7\n  Mutes in-game spectator chat"                            },
 	{ 0x1ff, "nextmap",                G_Nextmap_v,                "Load Next Map",              " ^7\n  Loads the next map or campaign in the map queue"              },
 	{ 0x1ff, "referee",                G_Referee_v,                "Referee",                    " <player_id>^7\n  Elects a player to have admin abilities"           },
-	{ 0x1ff, "shuffleteams",           G_ShuffleTeams_v,           "Shuffle Teams",              " ^7\n  Randomly place players on each team"                          },
-	{ 0x1ff, "shuffleteams_norestart", G_ShuffleTeams_NoRestart_v, "Shuffle Teams (No Restart)", " ^7\n  Randomly place players on each team"                          },
 	{ 0x1ff, "startmatch",             G_StartMatch_v,             "Start Match",                " ^7\n  Sets all players to \"ready\" status to start the match"      },
 	{ 0x1ff, "swapteams",              G_SwapTeams_v,              "Swap Teams",                 " ^7\n  Switch the players on each team"                              },
-	{ 0x1ff, "friendlyfire",           G_FriendlyFire_v,           "Friendly Fire",              " <0|1>^7\n  Toggles ability to hurt teammates"                       },
 	{ 0x1ff, "timelimit",              G_Timelimit_v,              "Timelimit",                  " <value>^7\n  Changes the current timelimit"                         },
 	{ 0x1ff, "unreferee",              G_Unreferee_v,              "UNReferee",                  " <player_id>^7\n  Elects a player to have admin abilities removed"   },
 	{ 0x1ff, "warmupdamage",           G_Warmupfire_v,             "Warmup Damage",              " <0|1|2>^7\n  Specifies if players can inflict damage during warmup" },
 	{ 0x1ff, "antilag",                G_AntiLag_v,                "Anti-Lag",                   " <0|1>^7\n  Toggles Anit-Lag on the server"                          },
 	{ 0x1ff, "balancedteams",          G_BalancedTeams_v,          "Balanced Teams",             " <0|1>^7\n  Toggles team balance forcing"                            },
-	{ 0x1ff, "surrender",              G_Surrender_v,              "Surrender",                  " ^7\n  Ends the match"                                               },
 	{ 0x1ff, "restartcampaign",        G_RestartCampaign_v,        "Restart Campaign",           " ^7\n  Restarts the current Campaign"                                },
 	{ 0x1ff, "nextcampaign",           G_NextCampaign_v,           "Next Campaign",              " ^7\n  Ends the current campaign and starts the next one"            },
 	{ 0x1ff, "poll",                   G_Poll_v,                   "[poll]",                     " <text>^7\n  Poll majority opinion"                                  },
@@ -213,6 +209,9 @@ void G_voteFlags(void)
 			flags |= voteToggles[i].flag;
 		}
 	}
+
+	// these don't exist anymore
+	flags |= CV_SVF_SHUFFLETEAMS | CV_SVF_SHUFFLETEAMS_NORESTART | CV_SVF_FRIENDLYFIRE | CV_SVF_SURRENDER;
 
 	if (flags != voteFlags.integer)
 	{
@@ -494,15 +493,6 @@ int G_Kick_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qb
 		{
 			G_refPrintf(ent, "Can't vote to kick etltv!");
 			return G_INVALID;
-		}
-
-		if (!fRefereeCmd && ent)
-		{
-			if (level.clients[pid].sess.sessionTeam != TEAM_SPECTATOR && level.clients[pid].sess.sessionTeam != ent->client->sess.sessionTeam)
-			{
-				G_refPrintf(ent, "Can't vote to kick players on opposing team!");
-				return G_INVALID;
-			}
 		}
 
 		Com_sprintf(level.voteInfo.vote_value, VOTE_MAXSTRING, "%d", pid);
@@ -1041,50 +1031,6 @@ int G_Referee_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2,
 }
 
 /**
- * @brief Shuffle teams
- * @param[in] ent
- * @param[in] dwVoteIndex
- * @param[in] arg
- * @param arg2 - unused
- * @param[in] fRefereeCmd
- * @return
- */
-int G_ShuffleTeams_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd)
-{
-	// Vote request (vote is being initiated)
-	if (arg)
-	{
-		if (trap_Argc() > 2)
-		{
-			G_refPrintf(ent, "Usage: ^3%s %s%s\n", ((fRefereeCmd) ? "\\ref" : "\\callvote"), arg, aVoteInfo[dwVoteIndex].pszVoteHelp);
-			return G_INVALID;
-		}
-		else if (!vote_allow_shuffleteams.integer && ent && !ent->client->sess.referee)
-		{
-			G_voteDisableMessage(ent, arg);
-			return G_INVALID;
-		}
-		// Vote action (vote has passed)
-	}
-	else
-	{
-		// Shuffle the teams!
-#ifdef FEATURE_RATING
-		if (g_skillRating.integer)
-		{
-			Svcmd_ShuffleTeamsSR_f(qtrue);
-		}
-		else
-#endif
-		{
-			Svcmd_ShuffleTeamsXP_f(qtrue);
-		}
-	}
-
-	return G_OK;
-}
-
-/**
  * @brief Start Match
  * @param[in] ent
  * @param[in] dwVoteIndex
@@ -1167,35 +1113,6 @@ int G_SwapTeams_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg
 	{
 		// Swap the teams!
 		Svcmd_SwapTeams_f();
-	}
-
-	return G_OK;
-}
-
-/**
- * @brief Team Damage
- * @param[in] ent
- * @param[in] dwVoteIndex
- * @param[in] arg
- * @param[in] arg2
- * @param[in] fRefereeCmd
- * @return
- */
-int G_FriendlyFire_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd)
-{
-	// Vote request (vote is being initiated)
-	if (arg)
-	{
-		return(G_voteProcessOnOff(ent, arg, arg2, fRefereeCmd,
-		                          !!(g_friendlyFire.integer),
-		                          vote_allow_friendlyfire.integer,
-		                          dwVoteIndex));
-		// Vote action (vote has passed)
-	}
-	else
-	{
-		// Team damage (friendlyFire)
-		G_voteSetOnOff("Friendly Fire", "g_friendlyFire");
 	}
 
 	return G_OK;
@@ -1752,97 +1669,6 @@ void G_IntermissionVoteTally(gentity_t *ent)
 }
 
 // MAPVOTE END
-
-/**
- * @brief Shuffle teams without restart
- * @param[in] ent
- * @param[in] dwVoteIndex
- * @param[in] arg
- * @param arg2 - unused
- * @param[in] fRefereeCmd
- * @return
- */
-int G_ShuffleTeams_NoRestart_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd)
-{
-	// Vote request (vote is being initiated)
-	if (arg)
-	{
-		if (trap_Argc() > 2)
-		{
-			// CHRUKER: b047 - Removed unneeded linebreak
-			G_refPrintf(ent, "Usage: ^3%s %s%s\n", ((fRefereeCmd) ? "\\ref" : "\\callvote"), arg, aVoteInfo[dwVoteIndex].pszVoteHelp);
-			return G_INVALID;
-		}
-		else if (!vote_allow_shuffleteams_norestart.integer && ent && !ent->client->sess.referee)
-		{
-			G_voteDisableMessage(ent, arg);
-			return G_INVALID;
-		}
-		// Vote action (vote has passed)
-	}
-	else
-	{
-		// Shuffle the teams!
-#ifdef FEATURE_RATING
-		if (g_skillRating.integer)
-		{
-			Svcmd_ShuffleTeamsSR_f(qfalse);
-		}
-		else
-#endif
-		{
-			Svcmd_ShuffleTeamsXP_f(qfalse);
-		}
-	}
-
-	return G_OK;
-}
-
-/**
- * @brief G_Surrender_v
- * @param[in] ent
- * @param dwVoteIndex - unused
- * @param[in] arg
- * @param[in] arg2
- * @param fRefereeCmd - unused
- * @return
- */
-int G_Surrender_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd)
-{
-	// Vote request (vote is being initiated)
-	if (arg)
-	{
-		if (!vote_allow_surrender.integer)
-		{
-			return G_INVALID;
-		}
-		if (g_gamestate.integer != GS_PLAYING)
-		{
-			return G_INVALID;
-		}
-		Q_strncpyz(arg2,
-		           (ent->client->sess.sessionTeam == TEAM_AXIS) ?
-		           "[AXIS]" : "[ALLIES]",
-		           VOTE_MAXSTRING);
-	}
-	// Vote action (vote has passed)
-	else if (g_gamestate.integer == GS_PLAYING)
-	{
-		char cs[MAX_STRING_CHARS];
-
-		trap_GetConfigstring(CS_MULTI_MAPWINNER, cs, sizeof(cs));
-		Info_SetValueForKey(cs, "w",
-		                    (level.voteInfo.voteTeam == TEAM_AXIS) ? "1" : "0");
-		trap_SetConfigstring(CS_MULTI_MAPWINNER, cs);
-		G_LogExit(va("%s Surrender",
-		             (level.voteInfo.voteTeam == TEAM_AXIS) ?
-		             "Axis" : "Allies"));
-		AP(va("chat \"%s have surrendered!\"",
-		      (level.voteInfo.voteTeam == TEAM_AXIS) ?
-		      "^1AXIS^7" : "^$ALLIES^7"));
-	}
-	return G_OK;
-}
 
 /**
  * @brief G_NextCampaign_v

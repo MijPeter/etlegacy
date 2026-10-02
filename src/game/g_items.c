@@ -453,25 +453,6 @@ int Pickup_Weapon(gentity_t *ent, gentity_t *other)
 			other->client->pers.lastammo_client = ent->parent->s.clientNum;
 		}
 
-		// if field ops isn't giving ammo to self or the enemy, give him some props
-		if (ent->parent && (ent->parent->client != other->client))
-		{
-			if (ent->parent && ent->parent->client && other->client->sess.sessionTeam == ent->parent->client->sess.sessionTeam)
-			{
-				G_AddSkillPoints(ent->parent, SK_SIGNALS, 1.f, "resupply");
-				G_LogPrintf("Ammo_Pack: %d %d\n", (int)(ent->parent - g_entities), (int)(other - g_entities));
-
-#ifdef FEATURE_OMNIBOT
-				//omni-bot event
-				if (ent->parent)
-				{
-					Bot_Event_ReceivedAmmo(other - g_entities, ent->parent);
-				}
-#endif
-				// extracted code originally here into AddMagicAmmo
-				// add 1 clip of magic ammo for any two-handed weapon
-			}
-		}
 		return PICKUP_RESPAWN_NEVER;
 	}
 
@@ -588,13 +569,6 @@ int Pickup_Health(gentity_t *ent, gentity_t *other)
 	if (ent->parent && ent->parent->client)
 	{
 		other->client->pers.lasthealth_client = ent->parent->s.clientNum;
-	}
-
-	// if medic isn't giving ammo to self or the enemy, give him some props
-	if (ent->parent && ent->parent->client && ent->parent->client != other->client && other->client->sess.sessionTeam == ent->parent->client->sess.sessionTeam)
-	{
-		G_AddSkillPoints(ent->parent, SK_FIRST_AID, 1.f, "healing");
-		G_LogPrintf("Health_Pack: %d %d\n", (int)(ent->parent - g_entities), (int)(other - g_entities));
 	}
 
 	other->health += ent->item->quantity;

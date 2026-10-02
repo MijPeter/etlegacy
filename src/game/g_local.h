@@ -486,6 +486,10 @@ struct gentity_s
 	gentity_t *tagParent;
 	gentity_t *tankLink;
 
+	gentity_t *corpseTwin;              ///< corpse <-> the copy of it wearing the other uniform
+	qboolean isCorpseTwin;
+	int corpseTeam;                     ///< team of the owner, set for corpses, their twins and their gib events
+
 	int lastHintCheckTime;
 	int lastTaskAchievedTime;
 	int voiceChatSquelch;
@@ -1502,7 +1506,6 @@ void G_TeamDataForString(const char *teamstr, int clientNum, team_t *team, spect
 qboolean SetTeam(gentity_t *ent, const char *s, qboolean force, weapon_t w1, weapon_t w2, qboolean setweapons);
 void G_SetClientWeapons(gentity_t *ent, weapon_t w1, weapon_t w2, qboolean updateclient);
 void Cmd_FollowCycle_f(gentity_t *ent, int dir, qboolean skipBots, qboolean serverForced);
-qboolean G_FollowSame(gentity_t *ent, int spectatorClient);
 qboolean G_ServerIsFloodProtected(void);
 
 #ifdef ETLEGACY_DEBUG
@@ -1842,6 +1845,10 @@ qboolean G_DemoRunFrame(void);
 // g_client.c
 char *ClientConnect(int clientNum, qboolean firstTime, qboolean isBot);
 void ClientUserinfoChanged(int clientNum);
+void G_UpdatePlayerInfos(void);
+gentity_t *G_GetCorpseTwin(gentity_t *body);
+void G_RunCorpseTwins(void);
+qboolean G_CorpseSnapshotCallback(gentity_t *ent, int clientNum);
 void ClientDisconnect(int clientNum);
 void ClientBegin(int clientNum);
 void ClientCommand(int clientNum);
@@ -1865,8 +1872,6 @@ qboolean ReadyToCallAirstrike(gentity_t *ent);
 // Are we ready to construct?  Optionally, will also update the time while we are constructing
 qboolean ReadyToConstruct(gentity_t *ent, gentity_t *constructible, qboolean updateState);
 
-// g_team.c
-qboolean OnSameTeam(gentity_t *ent1, gentity_t *ent2);
 //int Team_ClassForString(const char *string); // Unused
 
 // g_mem.c
@@ -2166,7 +2171,6 @@ void G_SetupFrustum(gentity_t *ent);
 void G_SetupFrustum_ForBinoculars(gentity_t *ent);
 qboolean G_VisibleFromBinoculars(gentity_t *viewer, gentity_t *ent, vec3_t origin);
 
-void G_LogTeamKill(gentity_t *ent, weapon_t weap);
 void G_LogDeath(gentity_t *ent, weapon_t weap);
 void G_LogKill(gentity_t *ent, weapon_t weap);
 void G_LogRegionHit(gentity_t *ent, hitRegion_t hr);
@@ -2283,7 +2287,6 @@ void G_specinvite_cmd(gentity_t *ent, unsigned int dwCommand, int fLock);
 void G_specuninvite_cmd(gentity_t *ent, unsigned int dwCommand, int fLock);
 void G_speclock_cmd(gentity_t *ent, unsigned int dwCommand, int fLock);
 void G_statsall_cmd(gentity_t *ent, unsigned int dwCommand, int fDump);
-void G_teamready_cmd(gentity_t *ent, unsigned int dwCommand, int fDump);
 void G_weaponRankings_cmd(gentity_t *ent, unsigned int dwCommand, int state);
 void G_weaponStats_cmd(gentity_t *ent, unsigned int dwCommand, int fDump);
 void G_weaponStatsLeaders_cmd(gentity_t *ent, qboolean doTop, qboolean doWindow);
@@ -2483,17 +2486,13 @@ int G_MatchReset_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *ar
 int G_Mutespecs_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Nextmap_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Referee_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
-int G_ShuffleTeams_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
-int G_ShuffleTeams_NoRestart_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_StartMatch_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_SwapTeams_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
-int G_FriendlyFire_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Timelimit_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Warmupfire_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Unreferee_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_AntiLag_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_BalancedTeams_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
-int G_Surrender_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_RestartCampaign_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_NextCampaign_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Poll_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
@@ -2567,7 +2566,6 @@ void G_TempTraceIgnoreEntity(gentity_t *ent);
 void G_TempTraceIgnoreBodies(void);
 void G_TempTraceIgnorePlayersAndBodies(void);
 void G_TempTraceIgnorePlayers(void);
-void G_TempTraceIgnorePlayersFromTeam(team_t team);
 void G_TempTraceRealHitBox(gentity_t *ent);
 void G_ResetTempTraceRealHitBox(void);
 void G_TempTraceIgnoreEntities(gentity_t *ent);

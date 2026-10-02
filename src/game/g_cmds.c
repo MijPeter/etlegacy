@@ -987,9 +987,7 @@ void Cmd_God_f(gentity_t *ent, unsigned int dwCommand, int value)
 	// can only use this cheat in single player
 	if (godAll && g_gametype.integer == GT_SINGLE_PLAYER)
 	{
-		int       j;
-		qboolean  settingFlag = qtrue;
-		gentity_t *other;
+		qboolean settingFlag = qtrue;
 
 		// are we turning it on or off?
 		if (ent->flags & FL_GODMODE)
@@ -997,24 +995,6 @@ void Cmd_God_f(gentity_t *ent, unsigned int dwCommand, int value)
 			settingFlag = qfalse;
 		}
 
-		// loop through all players
-		for (j = 0; j < level.maxclients; j++)
-		{
-			other = &g_entities[j];
-			// if they're on the same team
-			if (OnSameTeam(other, ent))
-			{
-				// set or clear the flag
-				if (settingFlag)
-				{
-					other->flags |= FL_GODMODE;
-				}
-				else
-				{
-					other->flags &= ~FL_GODMODE;
-				}
-			}
-		}
 		if (settingFlag)
 		{
 			msg = "godmode all ON\n";
@@ -1677,45 +1657,6 @@ qboolean SetTeam(gentity_t *ent, const char *s, qboolean force, weapon_t w1, wea
 
 	ent->client->pers.autofireteamCreateEndTime = 0;
 	ent->client->pers.autofireteamJoinEndTime   = 0;
-
-	if (client->sess.sessionTeam == TEAM_AXIS || client->sess.sessionTeam == TEAM_ALLIES)
-	{
-		switch (g_autoFireteams.integer)
-		{
-		case 1:
-		{
-			fireteamData_t *ft = G_FindFreePublicFireteam(client->sess.sessionTeam);
-
-			if (ft)
-			{
-				trap_SendServerCommand(ent - g_entities, "aftj -1");
-				ent->client->pers.autofireteamJoinEndTime = level.time + 20500;
-			}
-			else
-			{
-				trap_SendServerCommand(ent - g_entities, "aftc -1");
-				ent->client->pers.autofireteamCreateEndTime = level.time + 20500;
-			}
-			break;
-		}
-		case 2:
-		{
-			fireteamData_t *ft = G_FindFreePublicFireteam(client->sess.sessionTeam);
-
-			if (ft)
-			{
-				G_AddClientToFireteam(ent - g_entities, ft->joinOrder[0]);
-			}
-			else
-			{
-				G_RegisterFireteam(ent - g_entities);
-			}
-			break;
-		}
-		default:
-			break;
-		}
-	}
 
 	if (client->sess.sessionTeam == TEAM_AXIS || client->sess.sessionTeam == TEAM_ALLIES)
 	{
@@ -2470,9 +2411,10 @@ void Cmd_Follow_f(gentity_t *ent, unsigned int dwCommand, int value)
 		return;
 	}
 
-	if ((ent->client->sess.sessionTeam == TEAM_AXIS || ent->client->sess.sessionTeam == TEAM_ALLIES) && !(ent->client->ps.pm_flags & PMF_LIMBO))
+	// only spectators can follow, players have nobody on their side
+	if (ent->client->sess.sessionTeam == TEAM_AXIS || ent->client->sess.sessionTeam == TEAM_ALLIES)
 	{
-		CP("print \"Can't follow while not in limbo if on a team!\n\"");
+		CP("print \"Can't follow while playing!\n\"");
 		return;
 	}
 
@@ -2482,14 +2424,6 @@ void Cmd_Follow_f(gentity_t *ent, unsigned int dwCommand, int value)
 	{
 		team_t team;
 		team = (!Q_stricmp(arg, "allies") ? TEAM_ALLIES : TEAM_AXIS);
-
-		if ((ent->client->sess.sessionTeam == TEAM_AXIS ||
-		     ent->client->sess.sessionTeam == TEAM_ALLIES) &&
-		    ent->client->sess.sessionTeam != team)
-		{
-			CP("print \"Can't follow a player on an enemy team!\n\"");
-			return;
-		}
 
 		if (!TeamCount(ent - g_entities, team))
 		{
@@ -2525,15 +2459,6 @@ void Cmd_Follow_f(gentity_t *ent, unsigned int dwCommand, int value)
 
 	if (cnum == -1)
 	{
-		return;
-	}
-
-	// Can't follow enemy players if not a spectator
-	if ((ent->client->sess.sessionTeam == TEAM_AXIS ||
-	     ent->client->sess.sessionTeam == TEAM_ALLIES) &&
-	    ent->client->sess.sessionTeam != level.clients[cnum].sess.sessionTeam)
-	{
-		CP("print \"Can't follow a player on an enemy team!\n\"");
 		return;
 	}
 
@@ -2583,6 +2508,12 @@ void Cmd_FollowCycle_f(gentity_t *ent, int dir, qboolean skipBots, qboolean serv
 		SetTeam(ent, "s", qfalse, WP_NONE, WP_NONE, qfalse);
 	}
 
+	// only spectators can follow, players in limbo have nobody on their side
+	if (ent->client->sess.sessionTeam != TEAM_SPECTATOR)
+	{
+		return;
+	}
+
 	if (dir != 1 && dir != -1)
 	{
 		G_Error("Cmd_FollowCycle_f: bad dir %i\n", dir);
@@ -2611,19 +2542,6 @@ void Cmd_FollowCycle_f(gentity_t *ent, int dir, qboolean skipBots, qboolean serv
 		if (level.clients[clientnum].sess.sessionTeam == TEAM_SPECTATOR)
 		{
 			continue;
-		}
-
-		// couple extra checks for limbo mode
-		if (ent->client->ps.pm_flags & PMF_LIMBO && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
-		{
-			if (level.clients[clientnum].ps.pm_flags & PMF_LIMBO)
-			{
-				continue;
-			}
-			if (level.clients[clientnum].sess.sessionTeam != ent->client->sess.sessionTeam)
-			{
-				continue;
-			}
 		}
 
 		if (level.clients[clientnum].ps.pm_flags & PMF_LIMBO)
@@ -2678,52 +2596,6 @@ void Cmd_FollowNext_f(gentity_t *ent, unsigned int dwCommand, int value)
 void Cmd_FollowPrevious_f(gentity_t *ent, unsigned int dwCommand, int value)
 {
 	Cmd_FollowCycle_f(ent, -1, qfalse, qfalse);
-}
-
-/**
- * @brief Try to follow the same client as last time (before getting killed)
- * @param[in] ent
- * @param[in] spectatorClient
- */
-qboolean G_FollowSame(gentity_t *ent, int spectatorClient)
-{
-	if (spectatorClient < 0 || spectatorClient >= level.maxclients)
-	{
-		return qfalse;
-	}
-
-	// can only follow connected clients
-	if (level.clients[spectatorClient].pers.connected != CON_CONNECTED)
-	{
-		return qfalse;
-	}
-
-	// can't follow another spectator
-	if (level.clients[spectatorClient].sess.sessionTeam == TEAM_SPECTATOR)
-	{
-		return qfalse;
-	}
-
-	// couple extra checks for limbo mode
-	if (ent->client->ps.pm_flags & PMF_LIMBO)
-	{
-		if (level.clients[spectatorClient].sess.sessionTeam != ent->client->sess.sessionTeam)
-		{
-			return qfalse;
-		}
-	}
-
-	if (level.clients[spectatorClient].ps.pm_flags & PMF_LIMBO)
-	{
-		return qfalse;
-	}
-
-	if (!G_desiredFollow(ent, level.clients[spectatorClient].sess.sessionTeam))
-	{
-		return qfalse;
-	}
-
-	return qtrue;
 }
 
 /**
@@ -2798,7 +2670,7 @@ void G_SayTo(gentity_t *ent, gentity_t *other, int mode, int color, const char *
 	{
 		return;
 	}
-	if ((mode == SAY_TEAM || mode == SAY_TEAMNL) && !OnSameTeam(ent, other))
+	if ((mode == SAY_TEAM || mode == SAY_TEAMNL))
 	{
 		return;
 	}
@@ -3004,7 +2876,7 @@ void G_VoiceTo(gentity_t *ent, gentity_t *other, int mode, const char *id, qbool
 		return;
 	}
 
-	if (mode == SAY_TEAM && !OnSameTeam(ent, other))
+	if (mode == SAY_TEAM)
 	{
 		return;
 	}
@@ -3818,20 +3690,6 @@ void Cmd_Vote_f(gentity_t *ent, unsigned int dwCommand, int value)
 		{
 			return;
 		}
-
-		if (g_entities[pid].client->sess.sessionTeam != TEAM_SPECTATOR && ent->client->sess.sessionTeam != g_entities[pid].client->sess.sessionTeam)
-		{
-			trap_SendServerCommand(ent - g_entities, "print \"Cannot vote to kick player on opposing team.\n\"");
-			return;
-		}
-	}
-	else if (level.voteInfo.vote_fn == G_Surrender_v)
-	{
-		if (ent->client->sess.sessionTeam != level.voteInfo.voteTeam)
-		{
-			CP("cp \"You cannot vote on the other team's surrender.\"");
-			return;
-		}
 	}
 
 	trap_SendServerCommand(ent - g_entities, "print \"Vote cast.\n\"");
@@ -3987,7 +3845,7 @@ qboolean Do_UniformStealing(gentity_t *ent, gentity_t *traceEnt)
 		{
 			if (traceEnt->s.eType == ET_CORPSE)
 			{
-				if (level.time - BODY_LAST_ACTIVATE(traceEnt) >= 50 && BODY_TEAM(traceEnt) < 4 && BODY_TEAM(traceEnt) != ent->client->sess.sessionTeam)
+				if (level.time - BODY_LAST_ACTIVATE(traceEnt) >= 50 && BODY_TEAM(traceEnt) < 4)
 				{
 					if (BODY_VALUE(traceEnt) >= 250)
 					{

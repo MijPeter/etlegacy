@@ -113,6 +113,12 @@ static qboolean G_SnapshotCallbackExt(int entityNum, int clientNum, int clientNu
 		}
 	}
 
+	// corpses, their twins and their gib events
+	if (ent->corpseTeam)
+	{
+		return G_CorpseSnapshotCallback(ent, clientNumReal >= 0 ? clientNumReal : clientNum);
+	}
+
 	// don't send if out of range
 	if (ent->s.eType == ET_EVENTS + EV_SHAKE)
 	{
@@ -542,25 +548,7 @@ void G_CheckForCursorHints(gentity_t *ent)
 
 	traceEnt = &g_entities[tr->entityNum];
 
-	if (tr->fraction == 1.f || tr->entityNum == ENTITYNUM_WORLD || tr->entityNum < MAX_CLIENTS)
-	{
-		// show medics a syringe if they can revive someone
-		if (traceEnt->client && traceEnt->client->sess.sessionTeam == ent->client->sess.sessionTeam)
-		{
-			if (ps->stats[STAT_PLAYER_CLASS] == PC_MEDIC
-			    // reviving downed players
-			    && ((traceEnt->client->ps.pm_type == PM_DEAD && !(traceEnt->client->ps.pm_flags & PMF_LIMBO))
-			        // optionally healing living players
-			        || (g_syringeHealing.integer == 1
-			            && traceEnt->client->ps.pm_type == PM_NORMAL
-			            && traceEnt->health <= (int)(traceEnt->client->ps.stats[STAT_MAX_HEALTH] * 0.25f))))
-			{
-				hintDist = CH_REVIVE_DIST;        // matches weapon_syringe in g_weapon.c
-				hintType = HINT_REVIVE;
-			}
-		}
-	}
-	else
+	if (tr->fraction != 1.f && tr->entityNum != ENTITYNUM_WORLD && tr->entityNum >= MAX_CLIENTS)
 	{
 		checkEnt = traceEnt;
 
@@ -613,7 +601,7 @@ void G_CheckForCursorHints(gentity_t *ent)
 			case ET_CORPSE:
 				if (!ent->client->ps.powerups[PW_BLUEFLAG] && !ent->client->ps.powerups[PW_REDFLAG])
 				{
-					if (BODY_TEAM(traceEnt) < 4 && BODY_TEAM(traceEnt) != ent->client->sess.sessionTeam && traceEnt->nextthink == traceEnt->timestamp + BODY_TIME)
+					if (BODY_TEAM(traceEnt) < 4 && traceEnt->nextthink == traceEnt->timestamp + BODY_TIME)
 					{
 						if (ent->client->ps.stats[STAT_PLAYER_CLASS] == PC_COVERTOPS)
 						{
@@ -3763,23 +3751,6 @@ void CheckVote(void)
 			total = (level.voteInfo.voteYes
 			         + level.voteInfo.voteNo);
 		}
-		else if (level.voteInfo.vote_fn == G_Kick_v ||
-		         level.voteInfo.vote_fn == G_Surrender_v)
-		{
-
-			gentity_t *other = &g_entities[level.voteInfo.voteCaller];
-
-			if (!other->client ||
-			    other->client->sess.sessionTeam == TEAM_SPECTATOR)
-			{
-
-				total = level.voteInfo.numVotingClients;
-			}
-			else
-			{
-				total = level.voteInfo.numVotingTeamClients[other->client->sess.sessionTeam == TEAM_AXIS ? 0 : 1];
-			}
-		}
 		else
 		{
 			total = level.voteInfo.numVotingClients;
@@ -4635,6 +4606,8 @@ void G_RunFrame(int levelTime)
 	level.time         = levelTime;
 	level.frameTime    = level.time - level.previousTime;
 
+	G_UpdatePlayerInfos();
+
 	level.axisAirstrikeCounter   -= level.frameTime;
 	level.alliedAirstrikeCounter -= level.frameTime;
 	level.axisArtilleryCounter   -= level.frameTime;
@@ -4678,6 +4651,8 @@ void G_RunFrame(int levelTime)
 	{
 		G_RunEntity(&g_entities[i], level.frameTime);
 	}
+
+	G_RunCorpseTwins();
 
 	for (i = 0; i < level.numConnectedClients; i++)
 	{

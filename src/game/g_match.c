@@ -316,13 +316,9 @@ void G_addStats(gentity_t *targ, gentity_t *attacker, int damage, meansOfDeath_t
 
 			if (targ->health <= FORCE_LIMBO_HEALTH)
 			{
-				if (targ->client->sess.sessionTeam != attacker->client->sess.sessionTeam)
+				if (targ != attacker)
 				{
 					attacker->client->sess.gibs++;
-				}
-				else if (targ != attacker)
-				{
-					attacker->client->sess.team_gibs++;
 				}
 			}
 		}
@@ -333,13 +329,9 @@ void G_addStats(gentity_t *targ, gentity_t *attacker, int damage, meansOfDeath_t
 	// gibs from explosions when player was still alive
 	if (targ->health <= GIB_HEALTH && attacker && attacker->client)
 	{
-		if (targ->client->sess.sessionTeam != attacker->client->sess.sessionTeam)
+		if (targ != attacker)
 		{
 			attacker->client->sess.gibs++;
-		}
-		else if (targ != attacker)
-		{
-			attacker->client->sess.team_gibs++;
 		}
 	}
 
@@ -356,21 +348,6 @@ void G_addStats(gentity_t *targ, gentity_t *attacker, int damage, meansOfDeath_t
 		if (!attacker || !attacker->client)
 #endif
 		return;
-	}
-
-	// Player team stats
-	if (targ->client->sess.sessionTeam == attacker->client->sess.sessionTeam)
-	{
-		attacker->client->sess.team_damage_given += damage;
-		targ->client->sess.team_damage_received  += damage;
-
-		if (targ->health <= 0)
-		{
-			attacker->client->sess.team_kills++;
-		}
-#ifndef DEBUG_STATS
-		return;
-#endif
 	}
 
 	// General player stats

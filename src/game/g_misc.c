@@ -2527,23 +2527,6 @@ void G_TempTraceIgnorePlayers(void)
 	}
 }
 
-/**
- * @brief G_TempTraceIgnorePlayersAndBodiesFromTeam
- * @param[in] team
- */
-void G_TempTraceIgnorePlayersFromTeam(team_t team)
-{
-	int i;
-
-	for (i = 0; i < MAX_CLIENTS; i++)
-	{
-		if (g_entities[i].client && g_entities[i].client->sess.sessionTeam == team)
-		{
-			G_TempTraceIgnoreEntity(&g_entities[i]);
-		}
-	}
-}
-
 static gentity_t *entRealHitBoxList[MAX_GENTITIES];
 static vec3_t    BBoxMinsBackup[MAX_GENTITIES], BBoxMaxsBackup[MAX_GENTITIES];
 
@@ -2645,8 +2628,7 @@ void G_TempTraceIgnoreEntities(gentity_t *ent)
 		{
 			G_TempTraceIgnoreEntity(hit);
 		}
-		else if (hit->client && (!(ent->client->ps.stats[STAT_PLAYER_CLASS] == PC_MEDIC) || (ent->client->ps.stats[STAT_PLAYER_CLASS] == PC_MEDIC && ent->client->sess.sessionTeam != hit->client->sess.sessionTeam))
-		         && hit->client->ps.pm_type == PM_DEAD && !(hit->client->ps.pm_flags & PMF_LIMBO))
+		else if (hit->client && hit->client->ps.pm_type == PM_DEAD && !(hit->client->ps.pm_flags & PMF_LIMBO))
 		{
 			G_TempTraceIgnoreEntity(hit);
 		}

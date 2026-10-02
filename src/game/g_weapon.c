@@ -433,65 +433,6 @@ void ReviveEntity(gentity_t *ent, gentity_t *traceEnt)
 }
 
 /**
- * @brief Try to heal a living teammate with a syringe when enabled by cvar.
- * @param[in] healer
- * @param[in,out] target
- * @param[out] refundAmmo Set to qtrue when the syringe should be refunded.
- * @return qtrue if syringe healing logic handled this target, qfalse otherwise.
- */
-static qboolean G_TrySyringeHeal(gentity_t *healer, gentity_t *target, qboolean *refundAmmo)
-{
-	int maxHealth;
-	int healAmount;
-
-	*refundAmmo = qfalse;
-
-	// Keep stock ET behavior unless explicitly enabled.
-	if (g_syringeHealing.integer != 1)
-	{
-		return qfalse;
-	}
-
-	// Only living players are eligible for syringe healing.
-	if (!target->client || target->client->ps.pm_type != PM_NORMAL)
-	{
-		return qfalse;
-	}
-
-	// Invalid heal targets still consume the shot, so we refund here.
-	if (target->client->sess.sessionTeam != healer->client->sess.sessionTeam)
-	{
-		*refundAmmo = qtrue;
-		return qtrue;
-	}
-
-	maxHealth = target->client->ps.stats[STAT_MAX_HEALTH];
-	if (target->health > (int)(maxHealth * 0.25f))
-	{
-		*refundAmmo = qtrue;
-		return qtrue;
-	}
-
-	if (BG_IsSkillAvailable(healer->client->sess.skill, SK_FIRST_AID, SK_MEDIC_FULL_REVIVE))
-	{
-		healAmount = maxHealth;
-	}
-	else
-	{
-		healAmount = (int)(maxHealth * 0.5f);
-	}
-
-	target->health                         = healAmount;
-	target->client->ps.stats[STAT_HEALTH]  = healAmount;
-	target->client->pers.lasthealth_client = healer->s.clientNum;
-
-	G_Sound(target, GAMESOUND_MISC_REVIVE);
-	G_AddSkillPoints(healer, SK_FIRST_AID, 2.f, "healing");
-
-	return qtrue;
-}
-
-/**
 * @brief Shoot the syringe, do the old lazarus bit
 *
 * @param[in,out] ent
@@ -499,111 +440,8 @@ static qboolean G_TrySyringeHeal(gentity_t *healer, gentity_t *target, qboolean 
 */
 gentity_t *Weapon_Syringe(gentity_t *ent)
 {
-	vec3_t    end;
-	trace_t   tr;
-	gentity_t *traceEnt;
-	int       i;
-	qboolean  refundAmmo;
-
-	AngleVectors(ent->client->ps.viewangles, forward, right, up);
-	CalcMuzzlePointForActivate(ent, forward, right, up, muzzleTrace);
-	VectorMA(muzzleTrace, CH_REVIVE_DIST, forward, end);
-
-	// right on top of intended revivee.
-	G_TempTraceIgnorePlayersFromTeam(ent->s.teamNum == TEAM_AXIS ? TEAM_ALLIES : TEAM_AXIS);
-	G_TempTraceIgnoreBodies();
-
-	// Re-trace if we hit blocking deployables, otherwise either pass (hit a
-	// revivable body) or block (hit a wall etc.).
-	for (i = 0; i < level.num_entities; i++)
-	{
-		G_HistoricalTrace(ent, &tr, muzzleTrace, NULL, NULL, end, ent->s.number, MASK_SHOT);
-
-		if (tr.startsolid)
-		{
-			VectorMA(muzzleTrace, 8, forward, end);
-			trap_Trace(&tr, muzzleTrace, NULL, NULL, end, ent->s.number, MASK_SHOT);
-		}
-
-		if (tr.fraction == 1.0f || tr.entityNum == ENTITYNUM_WORLD || tr.entityNum == ENTITYNUM_NONE)
-		{
-			break;
-		}
-
-		traceEnt = &g_entities[tr.entityNum];
-		if (traceEnt->s.eType == ET_MISSILE
-		    && (traceEnt->s.weapon == WP_SATCHEL
-		        || traceEnt->s.weapon == WP_DYNAMITE
-		        || traceEnt->s.weapon == WP_LANDMINE))
-		{
-			G_TempTraceIgnoreEntity(traceEnt);
-			continue;
-		}
-
-		break;
-	}
-
-	G_ResetTempTraceIgnoreEnts();
-
-	if (tr.fraction == 1.0f) // no hit
-	{
-		// give back ammo
-		ent->client->ps.ammoclip[GetWeaponTableData(WP_MEDIC_SYRINGE)->clipIndex] += 1;
-		return NULL;
-	}
-
-	traceEnt = &g_entities[tr.entityNum];
-
-	if (!traceEnt->client)
-	{
-		// give back ammo
-		ent->client->ps.ammoclip[GetWeaponTableData(WP_MEDIC_SYRINGE)->clipIndex] += 1;
-		return NULL;
-	}
-
-	// Optional syringe-heal logic for living teammates.
-	if (G_TrySyringeHeal(ent, traceEnt, &refundAmmo))
-	{
-		if (refundAmmo)
-		{
-			ent->client->ps.ammoclip[GetWeaponTableData(WP_MEDIC_SYRINGE)->clipIndex] += 1;
-		}
-		return NULL;
-	}
-
-	if (traceEnt->client->ps.pm_type == PM_DEAD &&
-	    traceEnt->client->sess.sessionTeam == ent->client->sess.sessionTeam)
-	{
-		// moved all the revive stuff into its own function
-		ReviveEntity(ent, traceEnt);
-
-		// syringe "hit"
-		if (g_gamestate.integer == GS_PLAYING)
-		{
-			ent->client->sess.aWeaponStats[WS_SYRINGE].hits++;
-		}
-
-		// Let medics know who they just revived
-		trap_SendServerCommand(ent - g_entities, va("cp \"[lon]You have revived [lof]%s^7!\"", traceEnt->client->pers.netname));
-
-		G_LogPrintf("Medic_Revive: %d %d\n", (int)(ent - g_entities), (int)(traceEnt - g_entities));
-
-		if (!traceEnt->isProp) // flag for if they were teamkilled or not
-		{
-			G_AddSkillPoints(ent, SK_FIRST_AID, 4.f, "revive");
-		}
-
-		// calculate ranks to update numFinalDead arrays. Have to do it manually as addscore has an early out
-		if (g_gametype.integer == GT_WOLF_LMS)
-		{
-			CalculateRanks();
-		}
-	}
-	else
-	{
-		// If the medicine wasn't used, give back the ammo
-		ent->client->ps.ammoclip[GetWeaponTableData(WP_MEDIC_SYRINGE)->clipIndex] += 1;
-	}
+	// nobody to heal or revive, give back the ammo
+	ent->client->ps.ammoclip[GetWeaponTableData(WP_MEDIC_SYRINGE)->clipIndex] += 1;
 
 	return NULL;
 }
@@ -2784,19 +2622,6 @@ void weapon_checkAirStrikeThink(gentity_t *ent)
  */
 qboolean weapon_checkAirStrike(gentity_t *ent)
 {
-	// cancel the airstrike if FF off and player joined spec
-	// FIXME: this is a stupid workaround. Just store the parent team in the enitity itself and use that - no need to look up the parent
-	if (!g_friendlyFire.integer && ent->parent->client && ent->parent->client->sess.sessionTeam == TEAM_SPECTATOR)
-	{
-		ent->splashDamage = 0;  // no damage
-		ent->think        = G_ExplodeMissile;
-		ent->nextthink    = (int)(level.time + crandom() * 50);
-
-		ent->active = qfalse;
-
-		return qfalse; // do nothing, don't hurt anyone
-	}
-
 	if (!G_AvailableAirstrike(ent->parent))
 	{
 		G_HQSay(ent->parent, COLOR_YELLOW, "HQ: ", "All available planes are already en-route.");
@@ -4100,11 +3925,6 @@ qboolean AccuracyHit(gentity_t *target, gentity_t *attacker)
 		return qfalse;
 	}
 
-	if (OnSameTeam(target, attacker))
-	{
-		return qfalse;
-	}
-
 	return qtrue;
 }
 
@@ -4223,8 +4043,7 @@ qboolean G_PlayerCanBeSeenByOthers(gentity_t *ent)
 			continue;
 		}
 
-		if (ent2->health <= 0 ||
-		    ent2->client->sess.sessionTeam == ent->client->sess.sessionTeam)
+		if (ent2->health <= 0)
 		{
 			continue;
 		}
