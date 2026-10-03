@@ -1662,7 +1662,10 @@ gentity_t *G_Lua_CreateEntity(char *params)
 		level.numSpawnVars++;
 	}
 
-	create = G_SpawnGEntityFromSpawnVars();
+	// G_Spawn* refuse to run outside of spawning, as G_ScriptAction_Create knows
+	level.spawning = qtrue;
+	create         = G_SpawnGEntityFromSpawnVars();
+	level.spawning = qfalse;
 
 	if (!create)
 	{

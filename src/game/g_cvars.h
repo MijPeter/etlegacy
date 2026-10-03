@@ -152,6 +152,7 @@ extern vmCvar_t g_gamestate;
 extern vmCvar_t g_swapteams;
 
 extern vmCvar_t g_antilag;
+extern vmCvar_t g_bots;
 
 extern vmCvar_t refereePassword;
 extern vmCvar_t shoutcastPassword;
@@ -199,6 +200,8 @@ extern vmCvar_t vote_allow_nextcampaign;
 extern vmCvar_t vote_allow_poll;
 extern vmCvar_t vote_allow_maprestart;
 extern vmCvar_t vote_allow_cointoss;
+extern vmCvar_t vote_allow_bots;
+extern vmCvar_t vote_allow_startmatch;
 
 extern vmCvar_t g_debugSkills;
 extern vmCvar_t g_heavyWeaponRestriction;
@@ -274,6 +277,8 @@ extern vmCvar_t g_intermissionTime;
 extern vmCvar_t g_intermissionReadyPercent;
 
 extern vmCvar_t g_mapScriptDirectory;
+extern vmCvar_t g_mapVariant;
+extern vmCvar_t g_mapVariantNext;
 extern vmCvar_t g_mapConfigs;
 extern vmCvar_t g_customConfig;
 

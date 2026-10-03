@@ -74,6 +74,7 @@ static const vote_reference_t aVoteInfo[] =
 	{ 0x1ff, "mute",                   G_Mute_v,                   "MUTE",                       " <player_id>^7\n  Removes the chat capabilities of a player"         },
 	{ 0x1ff, "unmute",                 G_UnMute_v,                 "UN-MUTE",                    " <player_id>^7\n  Restores the chat capabilities of a player"        },
 	{ 0x1ff, "map",                    G_Map_v,                    "Change map to",              " <mapname>^7\n  Votes for a new map to be loaded"                    },
+	{ 0x1ff, "mapvariant",             G_MapVariant_v,             "Change map variant to",      " <variant>^7\n  Votes for a map variant to be loaded"                 },
 	{ 0x1ff, "campaign",               G_Campaign_v,               "Change campaign to",         " <campaign>^7\n  Votes for a new map to be loaded"                   },
 	{ 0x1ff, "maprestart",             G_MapRestart_v,             "Map Restart",                " ^7\n  Restarts the current map in progress"                         },
 	{ 0x1ff, "matchreset",             G_MatchReset_v,             "Match Reset",                " ^7\n  Resets the entire match"                                      },
@@ -92,6 +93,7 @@ static const vote_reference_t aVoteInfo[] =
 	{ 0x1ff, "poll",                   G_Poll_v,                   "[poll]",                     " <text>^7\n  Poll majority opinion"                                  },
 	{ 0x1ff, "config",                 G_Config_v,                 "Game config",                " <configname>^7\n  Loads up the server game config"                  },
 	{ 0x1ff, "cointoss",               G_CoinToss_v,               "Coin toss",                  " ^7\n  Tosses a coin and displays result to all players"             },
+	{ 0x1ff, "bots",                   G_Bots_v,                   "Bots",                       " <0|1>^7\n  Turns the bots on or off"                                },
 	{ 0,     0,                        NULL,                       0,                            0                                                                     },
 };
 
@@ -713,6 +715,56 @@ int G_Map_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qbo
 }
 
 /**
+ * @brief Map variant: its regular map with the variant's mapscript
+ * @param[in] ent
+ * @param[in] dwVoteIndex
+ * @param[in] arg
+ * @param[in] arg2
+ * @param[in] fRefereeCmd
+ * @return
+ */
+int G_MapVariant_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd)
+{
+	// Vote request (vote is being initiated)
+	if (arg)
+	{
+		char base[MAX_QPATH];
+
+		if (!vote_allow_map.integer && ent && !ent->client->sess.referee)
+		{
+			G_voteDisableMessage(ent, arg);
+			G_voteCurrentSetting(ent, arg, g_mapVariant.string[0] ? g_mapVariant.string : level.rawmapname);
+			return G_INVALID;
+		}
+		else if (G_voteDescription(ent, fRefereeCmd, dwVoteIndex))
+		{
+			G_voteCurrentSetting(ent, arg, g_mapVariant.string[0] ? g_mapVariant.string : level.rawmapname);
+			return G_INVALID;
+		}
+
+		if (!G_MapVariantBase(arg2, base, sizeof(base)))
+		{
+			G_refPrintf(ent, "Can't find map variant '%s'", arg2);
+			return G_INVALID;
+		}
+
+		Com_sprintf(level.voteInfo.vote_value, VOTE_MAXSTRING, "%s", arg2);
+
+		// Vote action (vote has passed)
+	}
+	else
+	{
+		char s[MAX_STRING_CHARS];
+
+		Svcmd_ResetMatch_f(qtrue, qfalse);
+		trap_Cvar_VariableStringBuffer("nextmap", s, sizeof(s));
+		trap_SendConsoleCommand(EXEC_APPEND, va("mapvariant %s%s\n", level.voteInfo.vote_value, ((*s) ? va("; set nextmap \"%s\"", s) : "")));
+	}
+
+	return G_OK;
+}
+
+/**
  * @brief Campaign - simpleton: we dont verify map is allowed/exists
  * @param[in] ent
  * @param[in] dwVoteIndex
@@ -1044,6 +1096,12 @@ int G_StartMatch_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *ar
 	// Vote request (vote is being initiated)
 	if (arg)
 	{
+		if (!vote_allow_startmatch.integer && ent && !ent->client->sess.referee)
+		{
+			G_voteDisableMessage(ent, arg);
+			return G_INVALID;
+		}
+
 		if (trap_Argc() > 2)
 		{
 			if (!Q_stricmp(arg2, "?"))
@@ -1142,6 +1200,36 @@ int G_AntiLag_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2,
 	{
 		// Anti-Lag (g_antilag)
 		G_voteSetOnOff("Anti-Lag", "g_antilag");
+	}
+
+	return G_OK;
+}
+
+/**
+ * @brief Bots on or off. The game itself doesn't act on g_bots: server side
+ * scripts that manage the bots (e.g. a Lua module) read it.
+ * @param[in] ent
+ * @param[in] dwVoteIndex
+ * @param[in] arg
+ * @param[in] arg2
+ * @param[in] fRefereeCmd
+ * @return
+ */
+int G_Bots_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd)
+{
+	// Vote request (vote is being initiated)
+	if (arg)
+	{
+		return(G_voteProcessOnOff(ent, arg, arg2, fRefereeCmd,
+		                          !!(g_bots.integer),
+		                          vote_allow_bots.integer,
+		                          dwVoteIndex));
+		// Vote action (vote has passed)
+	}
+	else
+	{
+		// Bots (g_bots)
+		G_voteSetOnOff("Bots", "g_bots");
 	}
 
 	return G_OK;

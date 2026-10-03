@@ -133,6 +133,7 @@ vmCvar_t g_soldierChargeTime;
 vmCvar_t g_covertopsChargeTime;
 
 vmCvar_t g_antilag;
+vmCvar_t g_bots;                // bots on (1) or off (0), for server side scripts to act on
 
 vmCvar_t g_spectatorInactivity;
 vmCvar_t match_latejoin;
@@ -175,6 +176,8 @@ vmCvar_t vote_allow_nextcampaign;
 vmCvar_t vote_allow_poll;
 vmCvar_t vote_allow_maprestart;
 vmCvar_t vote_allow_cointoss;
+vmCvar_t vote_allow_bots;
+vmCvar_t vote_allow_startmatch;
 
 vmCvar_t refereePassword;
 vmCvar_t shoutcastPassword;
@@ -285,6 +288,8 @@ vmCvar_t g_intermissionTime;
 vmCvar_t g_intermissionReadyPercent;
 
 vmCvar_t g_mapScriptDirectory;
+vmCvar_t g_mapVariant;      // map variant being played, empty for the regular map
+vmCvar_t g_mapVariantNext;  // map variant to use when the next map loads
 vmCvar_t g_mapConfigs;
 vmCvar_t g_customConfig;
 
@@ -468,6 +473,7 @@ cvarTable_t gameCvarTable[] =
 	{ &g_scriptName,                      "g_scriptName",                      "",                           CVAR_CHEAT,                                      0, qfalse, qfalse },
 
 	{ &g_antilag,                         "g_antilag",                         "1",                          CVAR_SERVERINFO | CVAR_ARCHIVE,                  0, qfalse, qfalse },
+	{ &g_bots,                            "g_bots",                            "1",                          0,                                               0, qfalse, qfalse },
 
 	{ NULL,                               "P",                                 "",                           CVAR_SERVERINFO_NOUPDATE,                        0, qfalse, qfalse },
 
@@ -514,6 +520,8 @@ cvarTable_t gameCvarTable[] =
 	{ &vote_allow_poll,                   "vote_allow_poll",                   "1",                          0,                                               0, qfalse, qfalse },
 	{ &vote_allow_maprestart,             "vote_allow_maprestart",             "1",                          0,                                               0, qfalse, qfalse },
 	{ &vote_allow_cointoss,               "vote_allow_cointoss",               "1",                          0,                                               0, qfalse, qfalse },
+	{ &vote_allow_bots,                   "vote_allow_bots",                   "1",                          0,                                               0, qfalse, qfalse },
+	{ &vote_allow_startmatch,             "vote_allow_startmatch",             "1",                          0,                                               0, qfalse, qfalse },
 
 	{ &g_voting,                          "g_voting",                          "0",                          0,                                               0, qfalse, qfalse },
 
@@ -628,6 +636,8 @@ cvarTable_t gameCvarTable[] =
 	{ &g_intermissionTime,                "g_intermissionTime",                "60",                         0,                                               0, qfalse, qfalse },
 	{ &g_intermissionReadyPercent,        "g_intermissionReadyPercent",        "100",                        0,                                               0, qfalse, qfalse },
 	{ &g_mapScriptDirectory,              "g_mapScriptDirectory",              "mapscripts",                 0,                                               0, qfalse, qfalse },
+	{ &g_mapVariant,                      "g_mapVariant",                      "",                           CVAR_ROM,                                        0, qfalse, qfalse },
+	{ &g_mapVariantNext,                  "g_mapVariantNext",                  "",                           CVAR_ROM,                                        0, qfalse, qfalse },
 	{ &g_mapConfigs,                      "g_mapConfigs",                      "",                           0,                                               0, qfalse, qfalse },
 	{ &g_customConfig,                    "g_customConfig",                    "defaultpublic",              CVAR_ARCHIVE,                                    0, qfalse, qfalse },
 	{ &g_moverScale,                      "g_moverScale",                      "1.0",                        0,                                               0, qfalse, qfalse },

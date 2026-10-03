@@ -1875,9 +1875,11 @@ char *CheckUserinfo(int clientNum, char *userinfo)
 // configstrings. So that everybody else looks like an enemy, players get their
 // own copy of the configstrings of players sharing their team, with the team swapped.
 #define PLAYERINFO_MAX_SENT_PER_FRAME 8 // per viewer, don't flood the reliable commands
+#define PLAYERINFO_RESEND_FRAMES      3 // frames before sending once more, for when the real one went out late
 
 static int  playerInfoDirtyFrame[MAX_CLIENTS];             // frame (+1) the configstring was last set at, 0 if nothing is pending
 static int  playerInfoViewTeam[MAX_CLIENTS];               // team the viewer had when the player infos were last queued for him
+static int  playerInfoResendFrame[MAX_CLIENTS];            // frame to send it once more at, 0 if nothing is pending
 static byte playerInfoPending[MAX_CLIENTS][MAX_CLIENTS];   // [viewer][other] has to be sent
 
 /**
@@ -1961,21 +1963,33 @@ void G_UpdatePlayerInfos(void)
 	// following the change, so it can only be replaced once this has happened
 	for (i = 0; i < level.numConnectedClients; i++)
 	{
+		qboolean send = qfalse;
+
 		otherNum = level.sortedClients[i];
 		other    = &level.clients[otherNum];
 
-		if (!playerInfoDirtyFrame[otherNum])
-		{
-			continue;
-		}
-
 		// not sent yet (frame numbers start over on restart, don't wait for ever)
-		if (level.framenum <= playerInfoDirtyFrame[otherNum] && playerInfoDirtyFrame[otherNum] <= level.framenum + 1)
+		if (playerInfoDirtyFrame[otherNum] &&
+		    (level.framenum > playerInfoDirtyFrame[otherNum] || playerInfoDirtyFrame[otherNum] > level.framenum + 1))
+		{
+			playerInfoDirtyFrame[otherNum] = 0;
+			send                           = qtrue;
+
+			// a map restart runs game frames without sending the configstrings,
+			// the real one can still be on its way then
+			playerInfoResendFrame[otherNum] = level.framenum + PLAYERINFO_RESEND_FRAMES;
+		}
+		else if (playerInfoResendFrame[otherNum] &&
+		         (level.framenum >= playerInfoResendFrame[otherNum] || playerInfoResendFrame[otherNum] > level.framenum + PLAYERINFO_RESEND_FRAMES))
+		{
+			playerInfoResendFrame[otherNum] = 0;
+			send                            = qtrue;
+		}
+
+		if (!send)
 		{
 			continue;
 		}
-
-		playerInfoDirtyFrame[otherNum] = 0;
 
 		for (j = 0; j < level.numConnectedClients; j++)
 		{

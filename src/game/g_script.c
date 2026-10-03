@@ -263,34 +263,21 @@ g_script_stack_action_t *G_Script_ActionForString(const char *string)
 }
 
 /**
- * @brief Loads the script for the current level into the buffer
+ * @brief Opens the script file of the given name, in g_mapScriptDirectory or else in maps/
+ * @param[in] scriptName
+ * @param[out] f
+ * @return length of the file, -1 if not found
  */
-void G_Script_ScriptLoad(void)
+static int G_Script_OpenFile(const char *scriptName, fileHandle_t *f)
 {
-	char         filename[MAX_QPATH];
-	vmCvar_t     mapname;
-	fileHandle_t f     = 0;
-	int          len   = 0;
-	qboolean     found = qfalse;
-
-	level.scriptEntity = NULL;
-
-	trap_Cvar_VariableStringBuffer("g_scriptName", filename, sizeof(filename));
-
-	if (strlen(filename) > 0)
-	{
-		trap_Cvar_Register(&mapname, "g_scriptName", "", CVAR_CHEAT);
-	}
-	else
-	{
-		trap_Cvar_Register(&mapname, "mapname", "", CVAR_SERVERINFO | CVAR_ROM);
-	}
+	char filename[MAX_QPATH];
+	int  len = -1;
 
 	if (g_mapScriptDirectory.string[0])
 	{
 		Q_strncpyz(filename, g_mapScriptDirectory.string, sizeof(filename));
 		Q_strcat(filename, sizeof(filename), "/");
-		Q_strcat(filename, sizeof(filename), mapname.string);
+		Q_strcat(filename, sizeof(filename), scriptName);
 
 		if (g_gametype.integer == GT_WOLF_LMS)
 		{
@@ -298,26 +285,59 @@ void G_Script_ScriptLoad(void)
 		}
 
 		Q_strcat(filename, sizeof(filename), ".script");
-		len = trap_FS_FOpenFile(filename, &f, FS_READ);
+		len = trap_FS_FOpenFile(filename, f, FS_READ);
 
 		if (len > 0)
 		{
-			found = qtrue;
+			return len;
 		}
 	}
 
-	if (!found)
+	Q_strncpyz(filename, "maps/", sizeof(filename));
+	Q_strcat(filename, sizeof(filename), scriptName);
+
+	if (g_gametype.integer == GT_WOLF_LMS)
 	{
-		Q_strncpyz(filename, "maps/", sizeof(filename));
-		Q_strcat(filename, sizeof(filename), mapname.string);
+		Q_strcat(filename, sizeof(filename), "_lms");
+	}
 
-		if (g_gametype.integer == GT_WOLF_LMS)
-		{
-			Q_strcat(filename, sizeof(filename), "_lms");
-		}
+	Q_strcat(filename, sizeof(filename), ".script");
+	return trap_FS_FOpenFile(filename, f, FS_READ);
+}
 
-		Q_strcat(filename, sizeof(filename), ".script");
-		len = trap_FS_FOpenFile(filename, &f, FS_READ);
+/**
+ * @brief Loads the script for the current level into the buffer
+ */
+void G_Script_ScriptLoad(void)
+{
+	char         scriptName[MAX_QPATH];
+	fileHandle_t f         = 0;
+	int          len       = 0;
+	qboolean     isVariant = qfalse;
+
+	level.scriptEntity = NULL;
+
+	trap_Cvar_VariableStringBuffer("g_scriptName", scriptName, sizeof(scriptName));
+
+	// map variants run the regular map with a script of their own
+	if (!scriptName[0])
+	{
+		trap_Cvar_VariableStringBuffer("g_mapVariant", scriptName, sizeof(scriptName));
+		isVariant = scriptName[0] != '\0';
+	}
+
+	if (!scriptName[0])
+	{
+		trap_Cvar_VariableStringBuffer("mapname", scriptName, sizeof(scriptName));
+	}
+
+	len = G_Script_OpenFile(scriptName, &f);
+
+	// a map variant without a script of its own uses the one of the regular map
+	if (len < 0 && isVariant)
+	{
+		trap_Cvar_VariableStringBuffer("mapname", scriptName, sizeof(scriptName));
+		len = G_Script_OpenFile(scriptName, &f);
 	}
 
 	// make sure we clear out the temporary scriptname

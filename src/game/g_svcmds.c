@@ -1106,6 +1106,33 @@ void Svcmd_Campaign_f(void)
 }
 
 /**
+ * @brief Svcmd_MapVariant_f
+ * @details Loads a map variant: its regular map with the variant's mapscript
+ */
+static void Svcmd_MapVariant_f(void)
+{
+	char variant[MAX_QPATH];
+	char base[MAX_QPATH];
+
+	if (trap_Argc() < 2)
+	{
+		G_Printf("usage: mapvariant <variant>\n");
+		return;
+	}
+
+	trap_Argv(1, variant, sizeof(variant));
+
+	if (!G_MapVariantBase(variant, base, sizeof(base)))
+	{
+		G_Printf("Can't find map variant '%s'\n", variant);
+		return;
+	}
+
+	trap_Cvar_Set("g_mapVariantNext", variant);
+	trap_SendConsoleCommand(EXEC_APPEND, va("map %s\n", base));
+}
+
+/**
  * @brief Svcmd_ListCampaigns_f
  */
 void Svcmd_ListCampaigns_f(void)
@@ -2606,6 +2633,7 @@ static consoleCommandTable_t consoleCommandTable[] =
 	{ "ban",                        G_PlayerBan                   },
 	{ "campaign",                   Svcmd_Campaign_f              },
 	{ "listcampaigns",              Svcmd_ListCampaigns_f         },
+	{ "mapvariant",                 Svcmd_MapVariant_f            },
 	{ "revive",                     Svcmd_RevivePlayer            },
 	{ "kick",                       Svcmd_Kick_f                  },    // moved from engine
 	{ "clientkick",                 Svcmd_Kick_f                  },    // both similar to keep compatibility

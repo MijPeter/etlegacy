@@ -1223,6 +1223,7 @@ typedef struct level_locals_s
 	qboolean etLegacyServer;
 
 	char rawmapname[MAX_QPATH];
+	char mapKey[MAX_QPATH];                     ///< map variant being played, or rawmapname
 
 	int maxclients;                             ///< store latched cvars here that we want to get at often
 
@@ -2480,6 +2481,7 @@ int G_Kick_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qb
 int G_Mute_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_UnMute_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Map_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
+int G_MapVariant_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Campaign_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_MapRestart_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_MatchReset_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
@@ -2498,6 +2500,7 @@ int G_NextCampaign_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *
 int G_Poll_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_Config_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 int G_CoinToss_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
+int G_Bots_v(gentity_t *ent, unsigned int dwVoteIndex, char *arg, char *arg2, qboolean fRefereeCmd);
 
 void G_LinkDebris(void);
 void G_LinkDamageParents(void);
@@ -2697,6 +2700,7 @@ fieldtype_t GetFieldType(const char *fieldname);
 // MAPVOTE
 void G_MapVoteInfoWrite(void);
 void G_MapVoteInfoRead(void);
+qboolean G_MapVariantBase(const char *variant, char *base, int size);
 
 // g_misc flags
 #define G_MISC_SHOVE_Z  BIT(0)

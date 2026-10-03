@@ -1395,6 +1395,97 @@ static ID_INLINE void G_SetupExtensions(void)
 }
 
 /**
+ * @brief Finds the regular map a map variant is played on.
+ * @details A map variant is the regular map (BSP) under another name, with a mapscript of its own.
+ * It's defined by maps/<variant>.variant which holds the name of the regular map,
+ * its mapscript is <g_mapScriptDirectory>/<variant>.script or maps/<variant>.script.
+ * @param[in] variant
+ * @param[out] base
+ * @param[in] size
+ * @return qtrue if the variant exists and its regular map is on the server
+ */
+qboolean G_MapVariantBase(const char *variant, char *base, int size)
+{
+	char         text[MAX_QPATH * 2];
+	char         *text_p = text;
+	char         *token;
+	int          len;
+	fileHandle_t f;
+
+	if (!variant || !variant[0])
+	{
+		return qfalse;
+	}
+
+	len = trap_FS_FOpenFile(va("maps/%s.variant", variant), &f, FS_READ);
+	if (len < 0)
+	{
+		return qfalse;
+	}
+
+	if (len >= (int)sizeof(text))
+	{
+		len = sizeof(text) - 1;
+	}
+
+	trap_FS_Read(text, len, f);
+	text[len] = '\0';
+	trap_FS_FCloseFile(f);
+
+	token = COM_Parse(&text_p);
+	if (!token[0] || !Q_stricmp(token, variant))
+	{
+		return qfalse;
+	}
+
+	len = trap_FS_FOpenFile(va("maps/%s.bsp", token), &f, FS_READ);
+	if (len < 0)
+	{
+		return qfalse;
+	}
+	trap_FS_FCloseFile(f);
+
+	Q_strncpyz(base, token, size);
+	return qtrue;
+}
+
+/**
+ * @brief Sets the map variant for this level.
+ * @details A new map takes the variant asked for it in g_mapVariantNext (if it's a variant of the map
+ * that got loaded), so loading a map in any other way gives the regular map. A restart keeps the variant.
+ * @param[in] restart
+ */
+static void G_MapVariantInit(int restart)
+{
+	char variant[MAX_QPATH];
+	char base[MAX_QPATH];
+
+	if (restart)
+	{
+		trap_Cvar_VariableStringBuffer("g_mapVariant", variant, sizeof(variant));
+	}
+	else
+	{
+		trap_Cvar_VariableStringBuffer("g_mapVariantNext", variant, sizeof(variant));
+		trap_Cvar_Set("g_mapVariantNext", "");
+	}
+
+	if (variant[0] && (!G_MapVariantBase(variant, base, sizeof(base)) || Q_stricmp(base, level.rawmapname)))
+	{
+		G_Printf("Map variant %s is not a variant of %s, ignored\n", variant, level.rawmapname);
+		variant[0] = '\0';
+	}
+
+	trap_Cvar_Set("g_mapVariant", variant);
+	Q_strncpyz(level.mapKey, variant[0] ? variant : level.rawmapname, sizeof(level.mapKey));
+
+	if (variant[0])
+	{
+		G_LogPrintf("mapvariant: %s\n", variant);
+	}
+}
+
+/**
  * @brief G_InitGame
  * @param[in] levelTime
  * @param[in] randomSeed
@@ -1575,6 +1666,8 @@ void G_InitGame(int levelTime, int randomSeed, int restart, int etLegacyServer, 
 	Q_strncpyz(level.rawmapname, Info_ValueForKey(cs, "mapname"), sizeof(level.rawmapname));
 
 	G_LogPrintf("map: %s\n", level.rawmapname);
+
+	G_MapVariantInit(restart);
 
 	// array acces check is done in G_RegisterCvars - we won't execute this with invalid gametype
 	G_LogPrintf("gametype: %s\n", gameNames[g_gametype.integer]);
@@ -2519,6 +2612,56 @@ int QDECL G_SortMapsByzOrder(const void *a, const void *b)
 }
 
 /**
+ * @brief Adds the map variants to a list of maps as returned by trap_FS_GetFileList
+ * @param[in,out] list
+ * @param[in] size
+ * @param[in] count number of maps in the list
+ * @return number of map variants added
+ */
+static int G_MapVariantAddToList(char *list, int size, int count)
+{
+	char variants[4096];
+	char name[MAX_QPATH];
+	char base[MAX_QPATH];
+	char *listEnd = list + size;
+	char *p       = list;
+	char *v       = variants;
+	int  numVariants, len, i;
+	int  added = 0;
+
+	// find the end of the list
+	for (i = 0; i < count && p < listEnd; i++)
+	{
+		p += strlen(p) + 1;
+	}
+
+	numVariants = trap_FS_GetFileList("maps", ".variant", variants, sizeof(variants));
+
+	for (i = 0; i < numVariants && v < variants + sizeof(variants); i++, v += len + 1)
+	{
+		len = strlen(v);
+		COM_StripExtension(v, name, sizeof(name));
+
+		if (!G_MapVariantBase(name, base, sizeof(base)))
+		{
+			G_Printf("Map variant %s: its regular map is missing, skipped\n", name);
+			continue;
+		}
+
+		if (p + strlen(name) + 1 > listEnd)
+		{
+			break;
+		}
+
+		Q_strncpyz(p, name, listEnd - p);
+		p += strlen(name) + 1;
+		added++;
+	}
+
+	return added;
+}
+
+/**
  * @brief BeginIntermission
  */
 void BeginIntermission(void)
@@ -2542,8 +2685,9 @@ void BeginIntermission(void)
 		char *bspptrEnd;
 		char str[128] = "\0";
 
-		level.mapVoteNumMaps = trap_FS_GetFileList("maps", ".bsp", bspNames, sizeof(bspNames));
-		bspptr               = bspNames;
+		level.mapVoteNumMaps  = trap_FS_GetFileList("maps", ".bsp", bspNames, sizeof(bspNames));
+		level.mapVoteNumMaps += G_MapVariantAddToList(bspNames, sizeof(bspNames), level.mapVoteNumMaps);
+		bspptr                = bspNames;
 
 		// A real shuffle ...
 		// This way not always the same maps will be on top of the list.
@@ -2671,7 +2815,8 @@ void BeginIntermission(void)
 		// zero out maps not available for voting this round
 		for (i = 0; i < len; i++)
 		{
-			if (!Q_stricmp(level.mapvoteinfo[i].bspName, level.rawmapname))
+			// only the map (or map variant) just played, not its other variants
+			if (!Q_stricmp(level.mapvoteinfo[i].bspName, level.mapKey))
 			{
 				level.mapvoteinfo[i].lastPlayed = 0;
 				level.mapvoteinfo[i].timesPlayed++;
@@ -2860,9 +3005,22 @@ void ExitLevel(void)
 
 		if (nextMap >= 0 && level.mapvoteinfo[nextMap].bspName[0])
 		{
+			char mapName[MAX_QPATH];
+
 			Q_strncpyz(level.lastVotedMap, level.mapvoteinfo[nextMap].bspName, sizeof(level.lastVotedMap));
 
-			trap_SendConsoleCommand(EXEC_APPEND, va("map %s;set nextmap %s\n", level.lastVotedMap, g_nextmap.string));
+			// a map variant loads its regular map
+			if (G_MapVariantBase(level.mapvoteinfo[nextMap].bspName, mapName, sizeof(mapName)))
+			{
+				trap_Cvar_Set("g_mapVariantNext", level.mapvoteinfo[nextMap].bspName);
+			}
+			else
+			{
+				Q_strncpyz(mapName, level.mapvoteinfo[nextMap].bspName, sizeof(mapName));
+				trap_Cvar_Set("g_mapVariantNext", "");
+			}
+
+			trap_SendConsoleCommand(EXEC_APPEND, va("map %s;set nextmap %s\n", mapName, g_nextmap.string));
 		}
 		else
 		{
