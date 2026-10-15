@@ -1505,6 +1505,7 @@ void Cmd_SetSpawnPoint_f(gentity_t *ent, unsigned int dwCommand, int value);
 void StopFollowing(gentity_t *ent);
 void G_TeamDataForString(const char *teamstr, int clientNum, team_t *team, spectatorState_t *sState);
 qboolean SetTeam(gentity_t *ent, const char *s, qboolean force, weapon_t w1, weapon_t w2, qboolean setweapons);
+qboolean G_IsClassFull(gentity_t *ent, int playerType, team_t team);
 void G_SetClientWeapons(gentity_t *ent, weapon_t w1, weapon_t w2, qboolean updateclient);
 void Cmd_FollowCycle_f(gentity_t *ent, int dir, qboolean skipBots, qboolean serverForced);
 qboolean G_ServerIsFloodProtected(void);

@@ -2192,14 +2192,31 @@ public:
 		}
 
 		int team = Bot_TeamGameToBot(bot->client->sess.sessionTeam);
-		bot->client->sess.latchPlayerType = playerClassBotToGame(_newclass);
+
+		// respect the team_max* class limits like a human's class choice does:
+		// a full class is replaced by the first class that isn't full
+		int      gameClass = playerClassBotToGame(_newclass);
+		qboolean classFull = G_IsClassFull(bot, gameClass, bot->client->sess.sessionTeam);
+		if (classFull)
+		{
+			for (int pc = PC_SOLDIER; pc <= PC_COVERTOPS; pc++)
+			{
+				if (!G_IsClassFull(bot, pc, bot->client->sess.sessionTeam))
+				{
+					gameClass = pc;
+					break;
+				}
+			}
+		}
+		bot->client->sess.latchPlayerType = gameClass;
 
 		Msg_PlayerChooseEquipment *pMsg = 0;
 		if (_data)
 		{
 			_data->Get2(pMsg);
 		}
-		if (pMsg)
+		// the weapons in pMsg were chosen for the full class
+		if (pMsg && !classFull)
 		{
 			if (pMsg->m_WeaponChoice[0])
 			{
