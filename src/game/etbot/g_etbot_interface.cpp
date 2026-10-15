@@ -2192,14 +2192,24 @@ public:
 		}
 
 		int team = Bot_TeamGameToBot(bot->client->sess.sessionTeam);
-		bot->client->sess.latchPlayerType = playerClassBotToGame(_newclass);
+
+		// no covert ops bots: a covert ops choice is replaced by a random one of the
+		// other classes, which are the ones below PC_COVERTOPS
+		int  gameClass = playerClassBotToGame(_newclass);
+		bool wasCovops = (gameClass == PC_COVERTOPS);
+		if (wasCovops)
+		{
+			gameClass = rand() % PC_COVERTOPS;
+		}
+		bot->client->sess.latchPlayerType = gameClass;
 
 		Msg_PlayerChooseEquipment *pMsg = 0;
 		if (_data)
 		{
 			_data->Get2(pMsg);
 		}
-		if (pMsg)
+		// the weapons in pMsg were chosen for covert ops
+		if (pMsg && !wasCovops)
 		{
 			if (pMsg->m_WeaponChoice[0])
 			{

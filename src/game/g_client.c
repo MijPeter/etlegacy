@@ -1537,13 +1537,8 @@ int G_CountTeamMedics(team_t team, qboolean alivecheck)
  */
 void AddMedicTeamBonus(gclient_t *client)
 {
-	// compute health mod
-	client->pers.maxHealth = DEFAULT_HEALTH + 10 * G_CountTeamMedics(client->sess.sessionTeam, qfalse);
-
-	if (client->pers.maxHealth > 125)
-	{
-		client->pers.maxHealth = 125;
-	}
+	// everybody gets the full medic team bonus (+25), whatever the number of medics on the team
+	client->pers.maxHealth = DEFAULT_HEALTH + 25;
 
 	if (BG_IsSkillAvailable(client->sess.skill, SK_BATTLE_SENSE, SK_BATTLE_SENSE_HEALTH))
 	{
