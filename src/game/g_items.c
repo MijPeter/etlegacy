@@ -170,6 +170,50 @@ qboolean AddMagicAmmo(gentity_t *receiver, int numOfClips)
 }
 
 /**
+ * @brief Tops up the reserve ammo of every weapon the client carries (g_infiniteAmmo).
+ * Clips still run dry and reload as usual.
+ * @param[in,out] client
+ */
+void G_RefillAmmo(gclient_t *client)
+{
+	playerState_t *ps = &client->ps;
+	weapon_t      weapon;
+
+	for (weapon = WP_NONE; weapon < WP_NUM_WEAPONS; weapon++)
+	{
+		weapon_t ammoIndex;
+		int      maxAmmo;
+
+		if (!GetWeaponTableData(weapon)->useAmmo || !COM_BitCheck(ps->weapons, weapon))
+		{
+			continue;
+		}
+
+		ammoIndex = GetWeaponTableData(weapon)->ammoIndex;
+		maxAmmo   = BG_MaxAmmoForWeapon(weapon, client->sess.skill, ps->stats[STAT_PLAYER_CLASS]);
+
+		// the round in the clip counts towards the maximum of weapons without clips, as in BG_AddMagicAmmo()
+		if (!GetWeaponTableData(weapon)->useClip)
+		{
+			maxAmmo -= ps->ammoclip[GetWeaponTableData(weapon)->clipIndex];
+		}
+
+		// throwing the last grenade takes the weapon away and switches to another (PM_SwitchIfEmpty()),
+		// so one always stays in reserve, also for classes that carry a single grenade
+		if ((GetWeaponTableData(weapon)->type & WEAPON_TYPE_GRENADE) && maxAmmo < 1)
+		{
+			maxAmmo = 1;
+		}
+
+		// weapons can share their ammo, so only ever add
+		if (ps->ammo[ammoIndex] < maxAmmo)
+		{
+			ps->ammo[ammoIndex] = maxAmmo;
+		}
+	}
+}
+
+/**
  * @brief Get the primary weapon of the client.
  * @param[in] client
  * @return the primary weapon of the client

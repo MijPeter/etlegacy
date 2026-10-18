@@ -1664,6 +1664,9 @@ void G_InitGame(int levelTime, int randomSeed, int restart, int etLegacyServer, 
 	Com_Memset(g_entities, 0, MAX_GENTITIES * sizeof(g_entities[0]));
 	level.gentities = g_entities;
 
+	// drops the preview's pointers into the entities just cleared
+	G_MissilePreviewInit();
+
 	// initialize all clients for this game
 	level.maxclients = g_maxclients.integer;
 	Com_Memset(g_clients, 0, MAX_CLIENTS * sizeof(g_clients[0]));
@@ -4428,6 +4431,12 @@ void G_RunEntity(gentity_t *ent, int msec)
 		return;
 	}
 
+	// the missile preview camera is an ET_MISSILE only so clients point their missile camera at it
+	if (G_MissilePreviewIsCamera(ent))
+	{
+		return;
+	}
+
 	switch (ent->s.eType)
 	{
 	case ET_MISSILE:
@@ -4683,6 +4692,8 @@ void G_RunFrame(int levelTime)
 	{
 		ClientEndFrame(&g_entities[level.sortedClients[i]]);
 	}
+
+	G_MissilePreviewRunFrame();
 
 	CheckWolfMP();
 

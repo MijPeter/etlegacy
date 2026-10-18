@@ -69,6 +69,8 @@ vmCvar_t g_debugMove;
 vmCvar_t g_debugDamage;
 vmCvar_t g_debugAlloc;
 vmCvar_t g_debugBullets;
+vmCvar_t g_missilePreview;
+vmCvar_t g_infiniteAmmo;
 vmCvar_t g_motd;
 #ifdef ALLOW_GSYNC
 vmCvar_t g_synchronousClients;
@@ -442,6 +444,8 @@ cvarTable_t gameCvarTable[] =
 	{ &g_debugDamage,                     "g_debugDamage",                     "0",                          CVAR_CHEAT,                                      0, qfalse, qfalse },
 	{ &g_debugAlloc,                      "g_debugAlloc",                      "0",                          0,                                               0, qfalse, qfalse },
 	{ &g_debugBullets,                    "g_debugBullets",                    "0",                          0,                                               0, qfalse, qfalse },
+	{ &g_missilePreview,                  "g_missilePreview",                  "1",                          0,                                               0, qfalse, qfalse }, // 0 off, 1 with sv_cheats, 2 always
+	{ &g_infiniteAmmo,                    "g_infiniteAmmo",                    "0",                          0,                                               0, qfalse, qfalse }, // keeps every player's reserve ammo full
 	{ &g_motd,                            "g_motd",                            "",                           CVAR_ARCHIVE,                                    0, qfalse, qfalse },
 
 	{ &voteFlags,                         "voteFlags",                         "0",                          CVAR_TEMP | CVAR_ROM | CVAR_SERVERINFO,          0, qfalse, qfalse },

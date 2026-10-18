@@ -2169,6 +2169,12 @@ qboolean CanDamage(gentity_t *targ, vec3_t origin)
 		VectorCopy(targ->client->ps.mins, offsetmins);
 		VectorCopy(targ->client->ps.maxs, offsetmaxs);
 	}
+	else if (G_MissilePreviewIsTarget(targ))
+	{
+		// stands in for a player, so probe its corners like a player's
+		VectorCopy(targ->r.mins, offsetmins);
+		VectorCopy(targ->r.maxs, offsetmaxs);
+	}
 
 	// this should probably check in the plane of projection,
 	// rather than in world coordinate

@@ -537,6 +537,15 @@ void G_ConfigCheckLocked(void)
 
 		if (Q_stricmp(config->setl[i].value, temp))
 		{
+			// G_InitGame() loads the config from inside the map command, which then sets sv_cheats
+			// itself (1 for devmap, 0 otherwise), so this one isn't manipulation: set it back
+			if (!Q_stricmp(config->setl[i].name, "sv_cheats"))
+			{
+				G_Printf("Config cvar \"%s\" was set to %s by the map load, restoring %s\n", config->setl[i].name, temp, config->setl[i].value);
+				trap_Cvar_Set(config->setl[i].name, config->setl[i].value);
+				continue;
+			}
+
 			G_Printf("Config cvar \"%s\" value: %s does not match the currently set value %s\n", config->setl[i].name, config->setl[i].value, temp);
 			trap_SetConfigstring(CS_CONFIGNAME, "");
 			trap_SendServerCommand(-1, va("cp \"^7Config '%s^7' ^1WAS UNLOADED DUE TO EXTERNAL MANIPULATION\"", config->name));

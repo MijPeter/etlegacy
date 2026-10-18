@@ -1572,6 +1572,12 @@ void ClientThink_real(gentity_t *ent)
 		ent->client->ps.classWeaponTime = 0;
 	}
 
+	// after every move, so the next one never starts on an empty reserve
+	if (g_infiniteAmmo.integer)
+	{
+		G_RefillAmmo(client);
+	}
+
 	if (g_entities[ent->client->ps.identifyClient].inuse && g_entities[ent->client->ps.identifyClient].client &&
 	    (ent->client->sess.sessionTeam == g_entities[ent->client->ps.identifyClient].client->sess.sessionTeam ||
 	     g_entities[ent->client->ps.identifyClient].client->ps.powerups[PW_OPS_DISGUISED]))

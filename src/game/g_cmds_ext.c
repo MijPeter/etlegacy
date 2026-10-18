@@ -121,6 +121,7 @@ static const cmd_reference_t aCommandInfo[] =
 	{ "kill",           CMD_USAGE_NO_INTERMISSION,   qtrue,       qfalse, Cmd_Kill_f,                          ":^7 Suicide"                                                                                },
 	{ "lock",           CMD_USAGE_ANY_TIME,          qtrue,       qtrue,  G_lock_cmd,                          ":^7 Locks a player's team to prevent others from joining"                                   },
 	{ "mapvote",        CMD_USAGE_INTERMISSION_ONLY, qtrue,       qfalse, G_IntermissionMapVote,               ""                                                                                           },
+	{ "missiletarget",  CMD_USAGE_NO_INTERMISSION,   qtrue,       qfalse, Cmd_MissileTarget_f,                 " [x y z [mins maxs]]:^7 Places or removes a box to aim the missile preview at"              },
 #ifdef FEATURE_MULTIVIEW
 	{ "mvadd",          CMD_USAGE_NO_INTERMISSION,   qtrue,       qfalse, G_smvAdd_cmd,                        " <player_ID>:^7 Adds a player to multi-screen view"                                         },
 	{ "mvallies",       CMD_USAGE_NO_INTERMISSION,   TEAM_ALLIES, qfalse, G_smvAddTeam_cmd,                    ":^7 Views entire allies/axis team"                                                          },

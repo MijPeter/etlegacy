@@ -1534,6 +1534,7 @@ void Fill_Clip(playerState_t *ps, weapon_t weapon);
 int Add_Ammo(gentity_t *ent, weapon_t weapon, int count, qboolean fillClip);
 void Touch_Item(gentity_t *ent, gentity_t *other, trace_t *trace);
 qboolean AddMagicAmmo(gentity_t *receiver, int numOfClips);
+void G_RefillAmmo(gclient_t *client);
 weapon_t G_GetPrimaryWeaponForClient(gclient_t *client);
 weapon_t G_GetPrimaryWeaponForClientSoldier(gclient_t *client);
 void G_DropWeapon(gentity_t *ent, weapon_t weapon);
@@ -1741,6 +1742,14 @@ void CalcMuzzlePointForActivate(gentity_t *ent, vec3_t forward, vec3_t right, ve
 
 void Weapon_MagicAmmo_Ext(gentity_t *ent, vec3_t viewpos, vec3_t tosspos, vec3_t velocity);
 void Weapon_Medic_Ext(gentity_t *ent, vec3_t viewpos, vec3_t tosspos, vec3_t velocity);
+
+// g_missilepreview.c
+void G_MissilePreviewInit(void);
+void G_MissilePreviewRunFrame(void);
+void G_MissilePreviewClientDisconnect(int clientNum);
+qboolean G_MissilePreviewIsCamera(gentity_t *ent);
+qboolean G_MissilePreviewIsTarget(gentity_t *ent);
+void Cmd_MissileTarget_f(gentity_t *ent, unsigned int dwCommand, int value);
 
 // g_client.c
 int TeamCount(int ignoreClientNum, team_t team);

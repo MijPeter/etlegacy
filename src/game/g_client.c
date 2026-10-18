@@ -3554,6 +3554,7 @@ void ClientDisconnect(int clientNum)
 	G_RemoveClientFromFireteams(clientNum, qtrue, qfalse);
 	G_RemoveFromAllIgnoreLists(clientNum);
 	G_LeaveTank(ent, qfalse);
+	G_MissilePreviewClientDisconnect(clientNum);
 
 	// update uniform owners
 	for (i = 0 ; i < level.numConnectedClients ; i++)
