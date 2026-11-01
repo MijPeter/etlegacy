@@ -494,6 +494,34 @@ static panel_button_t *demoControlButtons[] =
 	NULL
 };
 
+#define DEMO_SEEKUPDATE 100     ///< msec between seeks while an arrow key is held
+
+/**
+ * @brief Rewind or fast-forward the demo with arrow keys
+ * @param[in] seconds negative to rewind
+ */
+static void CG_DemoSeekKey(int seconds)
+{
+	static int nextSeekTime = 0;
+	int        milli        = trap_Milliseconds();
+
+	if (milli < nextSeekTime)
+	{
+		return;
+	}
+
+	nextSeekTime = milli + DEMO_SEEKUPDATE;
+
+	if (seconds < 0)
+	{
+		trap_SendConsoleCommand(va("rewind %d\n", -seconds));
+	}
+	else
+	{
+		trap_SendConsoleCommand(va("fastforward %d\n", seconds));
+	}
+}
+
 /**
  * @brief Demo playback key catcher support
  * @param[in] key
@@ -501,8 +529,6 @@ static panel_button_t *demoControlButtons[] =
  */
 void CG_DemoClick(int key, qboolean down)
 {
-	int milli = trap_Milliseconds();
-
 	// we don't want these duplicate key presses
 	if (key & K_CHAR_FLAG)
 	{
@@ -557,6 +583,13 @@ void CG_DemoClick(int key, qboolean down)
 		}
 	}
 #endif
+
+	// players of tv server demos are followed with the shoutcaster player list keys instead of avi controls
+	if (cg_tvDemo.integer && cgs.clientinfo[cg.clientNum].shoutcaster && key >= K_F1 && key <= K_F12)
+	{
+		CG_ShoutcastCheckExecKey(key, down);
+		return;
+	}
 
 	switch (key)
 	{
@@ -718,74 +751,19 @@ void CG_DemoClick(int key, qboolean down)
 		return;
 	case K_UPARROW:
 	case K_DOWNARROW:
-#ifdef FEATURE_EDV
-		// when not in thirdperson, arrowkeys should be bindable to +freecam_turnleft, ...
-		if (cg.renderingThirdPerson && !cgs.demoCamera.renderingFreeCam)
-#else
-		if (cg.renderingThirdPerson)
-#endif
+		if (down)
 		{
-			if (milli > cgs.thirdpersonUpdate)
-			{
-				float range = cg_thirdPersonRange.value;
-
-				cgs.thirdpersonUpdate = milli + DEMO_THIRDPERSONUPDATE;
-				if (key == K_UPARROW)
-				{
-					range -= ((range >= 4 * DEMO_RANGEDELTA) ? DEMO_RANGEDELTA : (range - DEMO_RANGEDELTA));
-				}
-				else
-				{
-					range += ((range >= 120 * DEMO_RANGEDELTA) ? 0 : DEMO_RANGEDELTA);
-				}
-				trap_Cvar_Set("cg_thirdPersonRange", va("%f", range));
-			}
+			// seek 1 second
+			CG_DemoSeekKey(key == K_UPARROW ? 1 : -1);
 		}
-#ifdef FEATURE_EDV
-		else
-		{
-			CG_RunBinding(key, down);
-		}
-#endif
 		return;
 	case K_RIGHTARROW:
 	case K_LEFTARROW:
-#ifdef FEATURE_EDV
-		if (cg.renderingThirdPerson && !cgs.demoCamera.renderingFreeCam)
-#else
-		if (cg.renderingThirdPerson)
-#endif
+		if (down)
 		{
-			if (milli > cgs.thirdpersonUpdate)
-			{
-				float angle = cg_thirdPersonAngle.value;
-
-				angle += (key == K_LEFTARROW ? DEMO_ANGLEDELTA : -DEMO_ANGLEDELTA);
-
-				cgs.thirdpersonUpdate = milli + DEMO_THIRDPERSONUPDATE;
-				if (key == K_RIGHTARROW)
-				{
-					if (angle < 0.f)
-					{
-						angle += 360.0f;
-					}
-				}
-				else
-				{
-					if (angle >= 360.0f)
-					{
-						angle -= 360.0f;
-					}
-				}
-				trap_Cvar_Set("cg_thirdPersonAngle", va("%f", angle));
-			}
+			// seek 5 seconds
+			CG_DemoSeekKey(key == K_RIGHTARROW ? 5 : -5);
 		}
-#ifdef FEATURE_EDV
-		else
-		{
-			CG_RunBinding(key, down);
-		}
-#endif
 		return;
 
 	case K_SPACE: // most everyone's favorite jump key, :x
@@ -1968,11 +1946,11 @@ void CG_DemoHelpDraw(void)
 			"^7KP_RIGHT  ^3speed up (+)",
 			"^7KP_5      ^3normal speed",
 			"^7SPACE     ^3pause demo",
+			"^7LFT/RGHT  ^3seek -/+5s",
+			"^7DOWN/UP   ^3seek -/+1s",
 			NULL,
 			"^7ENTER     ^3External view",
-			"^7LFT/RGHT  ^3Change angle",
 #ifdef FEATURE_EDV
-			"^nUP/DOWN   ^mMove in/out",
 			NULL,
 			//"^nKP_ENTER  ^mToggle freecam"
 #ifdef __APPLE__
@@ -1980,8 +1958,6 @@ void CG_DemoHelpDraw(void)
 #else
 			"^nALT       ^mmore options"
 #endif
-#else
-			"^nUP/DOWN   ^mMove in/out"
 #endif
 
 		};

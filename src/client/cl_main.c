@@ -138,6 +138,12 @@ void CL_AddReliableCommand(const char *cmd)
 {
 	int index;
 
+	// tv demo playback answers some commands of a tv server
+	if (clc.demo.playing && CL_TV_ClientCommand(cmd))
+	{
+		return;
+	}
+
 	// if we would be losing an old command that hasn't been acknowledged,
 	// we must drop the connection
 	if (clc.reliableSequence - clc.reliableAcknowledge > MAX_RELIABLE_COMMANDS)
@@ -652,6 +658,12 @@ void CL_ForwardCommandToServer(const char *string)
 
 	// ignore key up commands
 	if (cmd[0] == '-')
+	{
+		return;
+	}
+
+	// tv demo playback answers some commands of a tv server
+	if (clc.demo.playing && CL_TV_ClientCommand(string))
 	{
 		return;
 	}

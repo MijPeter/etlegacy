@@ -1398,7 +1398,7 @@ qboolean FS_IsDemoExt(const char *fileName, int namelen)
 	}
 
 	ext_test = strrchr(fileName, '.');
-	if (ext_test && (!Q_stricmpn(ext_test + 1, DEMOEXT, ARRAY_LEN(DEMOEXT) - 1) || !Q_stricmpn(ext_test + 1, SVDEMOEXT, ARRAY_LEN(SVDEMOEXT) - 1)))
+	if (ext_test && (!Q_stricmpn(ext_test + 1, DEMOEXT, ARRAY_LEN(DEMOEXT) - 1) || !Q_stricmpn(ext_test + 1, SVDEMOEXT, ARRAY_LEN(SVDEMOEXT) - 1) || !Q_stricmpn(ext_test + 1, SVCLDEMOEXT, ARRAY_LEN(SVCLDEMOEXT) - 1)))
 	{
 		int index;
 		int protocol = Q_atoi(ext_test + ARRAY_LEN(DEMOEXT));

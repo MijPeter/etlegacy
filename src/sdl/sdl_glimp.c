@@ -1018,7 +1018,10 @@ static int GLimp_SetMode(glconfig_t *glConfig, int mode, qboolean fullscreen, qb
 			}
 		}
 
+#ifndef __APPLE__
+		// on macOS this replaces the dock icon of the app bundle
 		SDL_SetWindowIcon(main_window, icon);
+#endif
 
 		if (flags & SDL_WINDOW_OPENGL && contextVersion > 0)
 		{

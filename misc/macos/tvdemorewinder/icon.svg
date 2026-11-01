@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe54a"/>
+      <stop offset="1" stop-color="#ffb300"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4df0ff"/>
+      <stop offset="1" stop-color="#12c6ee"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#background)"/>
+
+  <!-- antenna -->
+  <path d="M512 350 L372 178 M512 350 L652 178" fill="none" stroke="#14141c" stroke-width="40" stroke-linecap="round"/>
+
+  <!-- feet -->
+  <rect x="290" y="790" width="104" height="66" rx="20" fill="#14141c"/>
+  <rect x="630" y="790" width="104" height="66" rx="20" fill="#14141c"/>
+
+  <!-- set -->
+  <rect x="176" y="330" width="672" height="490" rx="76" fill="#14141c"/>
+  <rect x="226" y="380" width="572" height="390" rx="50" fill="url(#screen)"/>
+
+  <!-- rewind -->
+  <g fill="#14141c" stroke="#14141c" stroke-width="30" stroke-linejoin="round">
+    <path d="M296 575 L494 452 L494 698 Z"/>
+    <path d="M530 575 L728 452 L728 698 Z"/>
+  </g>
+</svg>

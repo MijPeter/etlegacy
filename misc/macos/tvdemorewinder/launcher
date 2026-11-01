@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# Main executable of TV Demo Rewinder.app
+# Runs the client with a home folder of its own, so the regular ET: Legacy
+# install keeps its config, profile lock and extracted mod libraries.
+
+contents="$(cd "$(dirname "$0")/.." && pwd)"
+support="$HOME/Library/Application Support"
+stock="$support/etlegacy"
+home="$support/etlegacy-tvdemorewinder"
+
+mkdir -p "$home/etmain" "$home/legacy"
+
+# the first launch starts from a copy of the regular settings
+if [ ! -e "$home/legacy/profiles" ] && [ -d "$stock/legacy/profiles" ]; then
+	rsync -a --exclude profile.pid --exclude .DS_Store "$stock/legacy/profiles" "$stock/legacy/huds" "$home/legacy/"
+	cp "$stock"/legacy/*.cfg "$home/legacy/" 2>/dev/null
+fi
+
+# base game, maps and demos are linked from the regular install
+# legacy/dlcache is left out on purpose, its older legacy packs could provide
+# their own cgame instead of the one of this client
+find -L "$home/etmain" -maxdepth 1 -type l -delete
+for pack in "$stock"/etmain/*.pk3 "$stock"/etmain/dlcache/*.pk3; do
+	[ -e "$pack" ] && ln -sf "$pack" "$home/etmain/"
+done
+ln -sfn "$stock/legacy/demos" "$home/legacy/demos"
+ln -sfn "$stock/legacy/tvdemos" "$home/legacy/tvdemos"
+
+# sv_pure 0 plays demos with the packs at hand instead of requiring the ones of the recording server
+exec "$contents/MacOS/tvdemorewinder" --title "TV Demo Rewinder" \
+	+set fs_basepath "$contents/Resources/game" \
+	+set fs_homepath "$home" \
+	+set sv_pure 0 \
+	"$@"

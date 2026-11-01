@@ -520,6 +520,19 @@ void CL_DemoRun(void);
 void CL_DemoInit(void);
 void CL_DemoShutdown(void);
 
+// cl_tvdemo
+
+qboolean CL_TV_Active(void);
+qboolean CL_TV_IsTVDemo(fileHandle_t f);
+void CL_TV_Start(void);
+void CL_TV_Stop(void);
+void CL_TV_ResetState(void);
+void *CL_TV_SaveState(void *backup);
+void CL_TV_RestoreState(const void *backup);
+void CL_TV_FreeState(void *backup);
+void CL_TV_TranscodeMessage(msg_t *msg, msg_t *out, qboolean withEntities);
+qboolean CL_TV_ClientCommand(const char *text);
+
 // cl_input
 
 /**

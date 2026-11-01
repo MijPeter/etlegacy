@@ -118,6 +118,7 @@ extern vmCvar_t cg_coronafardist;
 extern vmCvar_t cg_coronas;
 extern vmCvar_t cg_buildScript;
 extern vmCvar_t cg_paused;
+extern vmCvar_t cg_tvDemo;
 extern vmCvar_t cg_blood;
 extern vmCvar_t cg_predictItems;
 extern vmCvar_t cg_teamChatsOnly;

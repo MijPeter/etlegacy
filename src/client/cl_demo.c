@@ -92,6 +92,7 @@ typedef struct
 	clientConnection_t clc;
 	clientStatic_t cls;
 	int numSnaps;
+	void *tvState;          ///< parsed tv demo data
 } rewindBackups_t;
 
 cvar_t *cl_maxRewindBackups;
@@ -479,6 +480,7 @@ static void CL_RewindDemo(double wantedTime)
 {
 	int             i;
 	rewindBackups_t *rb;
+	vec3_t          lerpOrigin;
 
 	if (!IS_DEFAULT_MOD)
 	{
@@ -524,10 +526,19 @@ static void CL_RewindDemo(double wantedTime)
 	di.numSnaps  = rb->numSnaps;
 	di.snapCount = i + 1;
 
+	// tv demo snapshots are culled around the current cgame view
+	VectorCopy(cl.cgameClientLerpOrigin, lerpOrigin);
+
 	Com_Memcpy(&cl, &rb->cl, sizeof(clientActive_t));
 	Com_Memcpy(&clc, &rb->clc, sizeof(clientConnection_t));
 	Com_Memcpy(&cls, &rb->cls, sizeof(clientStatic_t));
 	di.Overf = 0;
+
+	if (CL_TV_Active())
+	{
+		CL_TV_RestoreState(rb->tvState);
+		VectorCopy(lerpOrigin, cl.cgameClientLerpOrigin);
+	}
 
 	// TODO: this is a hack to set the state to something valid
 	cls.state        = CA_ACTIVE;
@@ -710,6 +721,7 @@ static void CL_ParseDemo(void)
 	{
 		int   r;
 		msg_t buf;
+		msg_t tvBuf;
 		msg_t *msg;
 		byte  bufData[MAX_MSGLEN];
 		int   s;
@@ -761,7 +773,16 @@ static void CL_ParseDemo(void)
 		buf.readcount      = 0;
 
 		// parse
-		msg = &buf;
+		if (CL_TV_Active())
+		{
+			// only the snapshot times are needed
+			CL_TV_TranscodeMessage(&buf, &tvBuf, qfalse);
+			msg = &tvBuf;
+		}
+		else
+		{
+			msg = &buf;
+		}
 		MSG_Bitstream(msg);
 
 		// get the reliable sequence acknowledge number
@@ -898,6 +919,7 @@ static void CL_ParseDemo(void)
 	(void) FS_Seek(clc.demo.file, 0, FS_SEEK_SET);
 	clc.demo.playing = qfalse;
 	demofile         = clc.demo.file;
+	CL_TV_ResetState();
 	CL_ClearState();
 	Com_Memset(&clc, 0, sizeof(clc));
 	Com_ClearDownload();
@@ -914,8 +936,15 @@ static void CL_ParseDemo(void)
  */
 void CL_FreeDemoPoints(void)
 {
+	int i;
+
 	if (rewindBackups)
 	{
+		for (i = 0; i < maxRewindBackups; i++)
+		{
+			CL_TV_FreeState(rewindBackups[i].tvState);
+		}
+
 		Com_Dealloc(rewindBackups);
 		rewindBackups = NULL;
 	}
@@ -1187,6 +1216,8 @@ void CL_DemoCleanUp(void)
 #if NEW_DEMOFUNC
 	CL_FreeDemoPoints();
 #endif
+
+	CL_TV_Stop();
 }
 
 /**
@@ -1459,6 +1490,11 @@ void CL_ReadDemoMessage(void)
 			Com_Memcpy(&rb->cl, &cl, sizeof(clientActive_t));
 			Com_Memcpy(&rb->clc, &clc, sizeof(clientConnection_t));
 			Com_Memcpy(&rb->cls, &cls, sizeof(clientStatic_t));
+
+			if (CL_TV_Active())
+			{
+				rb->tvState = CL_TV_SaveState(rb->tvState);
+			}
 		}
 		di.snapCount++;
 	}
@@ -1510,6 +1546,16 @@ keep_reading:
 
 	clc.lastPacketTime = cls.realtime;
 	buf.readcount      = 0;
+
+	if (CL_TV_Active())
+	{
+		msg_t tvBuf;
+
+		CL_TV_TranscodeMessage(&buf, &tvBuf, qtrue);
+		CL_ParseServerMessage(&tvBuf);
+		return;
+	}
+
 	CL_ParseServerMessage(&buf);
 }
 
@@ -1530,13 +1576,32 @@ static void CL_CompleteDemoName(char *args, int argNum)
 }
 
 /**
+ * @brief Open a tv server demo, it's searched in tvdemos and demos folders
+ * @param[in] demoFile file name with extension
+ * @param[out] name
+ * @param[in] nameSize
+ */
+static void CL_OpenTVDemo(const char *demoFile, char *name, int nameSize)
+{
+	Com_sprintf(name, nameSize, "tvdemos/%s", demoFile);
+	FS_FOpenFileRead(name, &clc.demo.file, qtrue);
+
+	if (!clc.demo.file)
+	{
+		Com_sprintf(name, nameSize, "demos/%s", demoFile);
+		FS_FOpenFileRead(name, &clc.demo.file, qtrue);
+	}
+}
+
+/**
  * @brief Usage: demo \<demoname\>
  */
 void CL_PlayDemo_f(void)
 {
-	char name[MAX_OSPATH], retry[MAX_OSPATH];
-	char *demoFile, *ext_test;
-	int  protocol, i;
+	char     name[MAX_OSPATH], retry[MAX_OSPATH];
+	char     *demoFile, *ext_test;
+	int      protocol, i;
+	qboolean tvDemo = qfalse;
 
 	if (Cmd_Argc() < 2)
 	{
@@ -1585,6 +1650,12 @@ void CL_PlayDemo_f(void)
 			{
 				Com_sprintf(name, sizeof(name), "demos/%s", demoFile);
 				FS_FOpenFileRead(name, &clc.demo.file, qtrue);
+
+				// tv demos can be saved with a regular demo extension
+				if (!clc.demo.file)
+				{
+					CL_OpenTVDemo(demoFile, name, sizeof(name));
+				}
 			}
 		}
 		else
@@ -1604,9 +1675,43 @@ void CL_PlayDemo_f(void)
 			protocol   = CL_WalkDemoExt(retry, name, &clc.demo.file);
 		}
 	}
+	else if (ext_test && !Q_stricmpn(ext_test + 1, SVCLDEMOEXT, ARRAY_LEN(SVCLDEMOEXT) - 1))
+	{
+		protocol = Q_atoi(ext_test + ARRAY_LEN(SVCLDEMOEXT));
+		tvDemo   = qtrue;
+
+		Q_strncpyz(name, demoFile, sizeof(name));
+
+		if (protocol != PROTOCOL_VERSION)
+		{
+			Com_FuncPrinf("Protocol %d not supported for tv demos\n", protocol);
+		}
+		else if (Sys_PathAbsolute(demoFile))
+		{
+			char *nameOnly = strrchr(demoFile, '/');
+			FS_FOpenFileReadFullDir(demoFile, &clc.demo.file);
+
+			if (nameOnly)
+			{
+				demoFile = nameOnly + 1;
+			}
+		}
+		else
+		{
+			CL_OpenTVDemo(demoFile, name, sizeof(name));
+		}
+	}
 	else
 	{
 		protocol = CL_WalkDemoExt(demoFile, name, &clc.demo.file);
+
+		// fall back to a tv server demo of the same name
+		if (!clc.demo.file)
+		{
+			Com_sprintf(retry, sizeof(retry), "%s.%s%d", demoFile, SVCLDEMOEXT, PROTOCOL_VERSION);
+			CL_OpenTVDemo(retry, name, sizeof(name));
+			tvDemo = clc.demo.file != 0;
+		}
 	}
 
 	if (!clc.demo.file)
@@ -1615,6 +1720,12 @@ void CL_PlayDemo_f(void)
 	}
 
 	Con_Close();
+
+	// tv demos are also recognized by their content, the extension can be a regular one
+	if (tvDemo || CL_TV_IsTVDemo(clc.demo.file))
+	{
+		CL_TV_Start();
+	}
 
 #if NEW_DEMOFUNC
 	CL_AllocateDemoPoints();
@@ -1872,6 +1983,13 @@ void CL_SeekNext_f(void)
 		return;
 	}
 
+	// tv demo messages can't be peeked, the master server sends snapshots every frame
+	if (CL_TV_Active())
+	{
+		CL_DemoSeekMs(0, cl.snap.serverTime + 1000 / (cl.sv_fps > 0 ? cl.sv_fps : DEFAULT_SV_FPS));
+		return;
+	}
+
 	i = 1;
 	while (1)
 	{
@@ -1997,6 +2115,9 @@ void CL_DemoInit(void)
 
 	cl_maxRewindBackups = Cvar_Get("cl_maxRewindBackups", va("%i", MAX_REWIND_BACKUPS), CVAR_ARCHIVE_ND | CVAR_LATCH);
 #endif
+
+	// set while a tv server demo is played
+	Cvar_Get("cl_tvdemo", "0", CVAR_ROM);
 
 	Cmd_AddCommand("benchmark", CL_StartBenchmark_f, "Start a timedemo benchmark on given demo file.", CL_CompleteDemoName);
 }
